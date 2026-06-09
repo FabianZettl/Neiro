@@ -1,0 +1,2 @@
+-keepattributes SourceFile,LineNumberTable
+-keep class dev.neiro.app.data.api.models.** { *; }
