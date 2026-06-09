@@ -116,7 +116,7 @@ class HomeViewModel @Inject constructor(
     private suspend fun loadSections(configs: List<HomeSectionConfig>) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         try {
-            val hasLastFm = lastFmRepository.isSessionConfigured()
+            val hasLastFm = lastFmRepository.isStatsConfigured()
             val enabledConfigs = configs.filter { it.enabled }
             coroutineScope {
                 val sections = enabledConfigs.map { config ->

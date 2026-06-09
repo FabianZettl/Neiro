@@ -149,6 +149,13 @@ class LastFmRepository @Inject constructor(
         return false // overridden by isSessionConfigured()
     }
 
+    /** True if read-only stats (top artists/albums/tracks) are available. Only needs username + API key. */
+    suspend fun isStatsConfigured(): Boolean {
+        val prefs = preferences.prefsFlow.first()
+        return prefs.lastFmUsername.isNotBlank() && prefs.lastFmApiKey.isNotBlank()
+    }
+
+    /** True if write operations (love/unlove) are available. Needs a session key. */
     suspend fun isSessionConfigured(): Boolean {
         val prefs = preferences.prefsFlow.first()
         return prefs.lastFmSessionKey.isNotBlank()

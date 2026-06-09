@@ -31,7 +31,7 @@ class ManageSectionsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            _hasLastFm.value = lastFmRepository.isSessionConfigured()
+            _hasLastFm.value = lastFmRepository.isStatsConfigured()
         }
     }
 

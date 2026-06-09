@@ -29,11 +29,11 @@ enum class DataSource(val displayName: String) {
 }
 
 enum class LastFmPeriod(val displayName: String, val apiValue: String) {
-    WEEK("7 days", "7day"),
-    MONTH("1 month", "1month"),
-    THREE_MONTHS("3 months", "3month"),
-    SIX_MONTHS("6 months", "6month"),
-    YEAR("12 months", "12month"),
+    WEEK("Last 7 days", "7day"),
+    MONTH("Last 30 days", "1month"),
+    THREE_MONTHS("Last 90 days", "3month"),
+    SIX_MONTHS("Last 180 days", "6month"),
+    YEAR("Last 365 days", "12month"),
     OVERALL("All time", "overall")
 }
 
