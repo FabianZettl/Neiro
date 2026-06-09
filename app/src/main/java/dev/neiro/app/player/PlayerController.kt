@@ -189,8 +189,12 @@ class PlayerController @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        _controller.value?.seekTo(positionMs)
-        // Update state immediately so the seek bar doesn't snap back while ExoPlayer catches up
+        val controller = _controller.value ?: return
+        if (!controller.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            Log.w("NieroPlayer", "seekTo($positionMs) ignored — SEEK command not available (stream not seekable?)")
+            return
+        }
+        controller.seekTo(positionMs)
         _playerState.value = _playerState.value.copy(positionMs = positionMs)
     }
 
@@ -225,7 +229,7 @@ class PlayerController @Inject constructor(
 
         Log.d("NieroPlayer", "Stream URL (masked): $base/rest/stream?id=${song.id}&u=${prefs.username}&t=***&s=***&v=1.16.1&c=neiro$bitrateParam")
 
-        return MediaItem.Builder()
+        val builder = MediaItem.Builder()
             .setUri(streamUrl)
             .setMediaId(song.id)
             .setMediaMetadata(
@@ -236,6 +240,19 @@ class PlayerController @Inject constructor(
                     .setArtworkUri(song.coverArtUrl?.let { android.net.Uri.parse(it) })
                     .build()
             )
-            .build()
+
+        // Provide the known duration so ExoPlayer can seek even on transcoded streams
+        // where the HTTP response has no Content-Length (on-the-fly encoding).
+        // Without this, COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM is unavailable and every
+        // seekTo() call is silently dropped.
+        if (song.duration > 0) {
+            builder.setClippingConfiguration(
+                MediaItem.ClippingConfiguration.Builder()
+                    .setEndPositionMs(song.duration * 1000L)
+                    .build()
+            )
+        }
+
+        return builder.build()
     }
 }

@@ -152,6 +152,20 @@ data class LastFmLovedTracksResponse(
     @SerializedName("lovedtracks") val lovedTracks: LastFmLovedTracksMeta? = null
 )
 
+// ── Top Tracks ────────────────────────────────────────────────────────────────
+
+data class LastFmTopTrack(
+    @SerializedName("name") val name: String = "",
+    @SerializedName("playcount") val playCount: String = "0",
+    @SerializedName("artist") val artist: LastFmLovedTrackArtist = LastFmLovedTrackArtist()
+) {
+    val playCountLong get() = playCount.toLongOrNull() ?: 0L
+}
+
+data class LastFmTopTracksMeta(@SerializedName("track") val tracks: List<LastFmTopTrack> = emptyList())
+
+data class LastFmTopTracksResponse(@SerializedName("toptracks") val topTracks: LastFmTopTracksMeta? = null)
+
 // ── Session ───────────────────────────────────────────────────────────────────
 
 data class LastFmSession(

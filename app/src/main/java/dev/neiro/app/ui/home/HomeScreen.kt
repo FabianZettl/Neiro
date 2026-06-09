@@ -313,6 +313,14 @@ fun HomeScreen(
                                     onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
                                 )
                             }
+
+                            is SectionItems.LastFmTopTracks -> item(key = "lfm_tracks_${sectionContent.config.id}") {
+                                LastFmTopTracksList(tracks = items.items)
+                            }
+
+                            is SectionItems.Genres -> item(key = "genres_${sectionContent.config.id}") {
+                                GenreShelfRow(genres = items.items)
+                            }
                         }
                     }
                 }
@@ -1004,6 +1012,108 @@ private fun LastFmAlbumShelfRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+    }
+}
+
+// ── Last.fm Top Tracks list ───────────────────────────────────────────────────
+
+@Composable
+private fun LastFmTopTracksList(tracks: List<LastFmMatchedTrack>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        tracks.forEachIndexed { index, track ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${index + 1}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(28.dp)
+                )
+                if (track.coverArtUrl != null) {
+                    AsyncImage(
+                        model = track.coverArtUrl,
+                        contentDescription = track.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = track.artistName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = "${track.playCount} plays",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+// ── Genres shelf ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun GenreShelfRow(genres: List<GenreItem>) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(genres, key = { it.name }) { genre ->
+            Box(
+                modifier = Modifier
+                    .height(64.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = genre.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${genre.albumCount} albums",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }

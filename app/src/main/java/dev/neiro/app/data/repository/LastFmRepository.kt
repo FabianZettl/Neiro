@@ -5,6 +5,7 @@ import dev.neiro.app.data.api.models.LastFmAlbumInfo
 import dev.neiro.app.data.api.models.LastFmArtistInfo
 import dev.neiro.app.data.api.models.LastFmTopAlbumsResponse
 import dev.neiro.app.data.api.models.LastFmTopArtistsResponse
+import dev.neiro.app.data.api.models.LastFmTopTracksResponse
 import dev.neiro.app.data.api.models.LastFmTrackInfo
 import dev.neiro.app.data.api.models.LastFmUserInfo
 import dev.neiro.app.data.prefs.NieroPreferences
@@ -31,6 +32,13 @@ class LastFmRepository @Inject constructor(
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching { api.getTopArtists(user = user, period = period, limit = limit, apiKey = key) }
+            .getOrNull()
+    }
+
+    suspend fun getTopTracks(period: String, limit: Int = 20): LastFmTopTracksResponse? {
+        val (user, key) = creds()
+        if (!isConfigured(user, key)) return null
+        return runCatching { api.getTopTracks(user = user, apiKey = key, period = period, limit = limit) }
             .getOrNull()
     }
 

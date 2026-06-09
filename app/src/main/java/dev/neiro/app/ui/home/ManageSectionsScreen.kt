@@ -40,9 +40,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -269,21 +271,32 @@ private fun SectionCard(
                         }
                     }
 
-                    // Size
-                    FilterLabel("Items to Show")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(5, 10, 20, 50, 100).forEach { n ->
-                            FilterChip(
-                                selected = config.size == n,
-                                onClick = { onUpdate { it.copy(size = n) } },
-                                label = { Text(n.toString()) },
-                                colors = chipColors()
-                            )
+                    // Items to Show
+                    FilterLabel("Items to Show: ${config.size}")
+                    Slider(
+                        value = config.size.toFloat(),
+                        onValueChange = { v -> onUpdate { it.copy(size = v.roundToInt().coerceIn(1, 50)) } },
+                        valueRange = 1f..50f,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Data Source picker (for ALBUMS, ARTISTS, TRACKS)
+                    if (config.contentType in listOf(SectionContentType.ALBUMS, SectionContentType.ARTISTS, SectionContentType.TRACKS)) {
+                        FilterLabel("Data Source")
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DataSource.entries.forEach { source ->
+                                FilterChip(
+                                    selected = config.dataSource == source,
+                                    onClick = { onUpdate { it.copy(dataSource = source) } },
+                                    label = { Text(source.displayName) },
+                                    colors = chipColors()
+                                )
+                            }
                         }
                     }
 
                     // Album-only filters
-                    if (config.contentType == SectionContentType.ALBUMS) {
+                    if (config.contentType == SectionContentType.ALBUMS && config.dataSource == DataSource.SUBSONIC) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         Text(
                             "FILTER & SORT",
@@ -391,7 +404,7 @@ private fun SectionCard(
                     }
 
                     // Artist-only filters
-                    if (config.contentType == SectionContentType.ARTISTS) {
+                    if (config.contentType == SectionContentType.ARTISTS && config.dataSource == DataSource.SUBSONIC) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         Text(
                             "FILTER & SORT",
@@ -425,8 +438,8 @@ private fun SectionCard(
                     }
 
                     // Last.fm period picker
-                    if (config.contentType == SectionContentType.LASTFM_ARTISTS ||
-                        config.contentType == SectionContentType.LASTFM_ALBUMS) {
+                    if (config.dataSource == DataSource.LASTFM &&
+                        config.contentType in listOf(SectionContentType.ALBUMS, SectionContentType.ARTISTS, SectionContentType.TRACKS)) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         Text(
                             "LAST.FM PERIOD",
@@ -489,22 +502,31 @@ private fun buildSummary(config: HomeSectionConfig): String {
     parts += config.contentType.displayName
     when (config.contentType) {
         SectionContentType.ALBUMS -> {
-            parts += config.sortType.displayName
-            if (config.genre != null) parts += "Genre: ${config.genre}"
-            if (config.starredOnly) parts += "Starred"
-            if (config.playedInLastDays != null) parts += "Last ${config.playedInLastDays}d"
-            if (config.minPlayCount != null) parts += "${config.minPlayCount}+ plays"
-            if (config.yearFrom != null || config.yearTo != null) {
-                parts += "${config.yearFrom ?: "?"}–${config.yearTo ?: "?"}"
+            if (config.dataSource == DataSource.LASTFM) {
+                parts += "Last.fm · ${config.lastFmPeriod.displayName}"
+            } else {
+                parts += config.sortType.displayName
+                if (config.genre != null) parts += "Genre: ${config.genre}"
+                if (config.starredOnly) parts += "Starred"
+                if (config.playedInLastDays != null) parts += "Last ${config.playedInLastDays}d"
+                if (config.minPlayCount != null) parts += "${config.minPlayCount}+ plays"
+                if (config.yearFrom != null || config.yearTo != null) {
+                    parts += "${config.yearFrom ?: "?"}–${config.yearTo ?: "?"}"
+                }
             }
         }
         SectionContentType.ARTISTS -> {
-            parts += config.artistSortType.displayName
-            if (config.artistGenre != null) parts += "Genre: ${config.artistGenre}"
+            if (config.dataSource == DataSource.LASTFM) {
+                parts += "Last.fm · ${config.lastFmPeriod.displayName}"
+            } else {
+                parts += config.artistSortType.displayName
+                if (config.artistGenre != null) parts += "Genre: ${config.artistGenre}"
+            }
         }
-        SectionContentType.LASTFM_ARTISTS, SectionContentType.LASTFM_ALBUMS -> {
-            parts += config.lastFmPeriod.displayName
+        SectionContentType.TRACKS -> {
+            parts += "Last.fm · ${config.lastFmPeriod.displayName}"
         }
+        SectionContentType.GENRES -> { /* no extra */ }
         else -> {}
     }
     parts += "${config.size} items · ${config.layout.label} · ${config.itemShape.label}"

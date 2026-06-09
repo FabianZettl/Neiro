@@ -17,10 +17,15 @@ enum class SectionLayout(val label: String) {
 
 enum class SectionContentType(val displayName: String) {
     ALBUMS("Albums"),
-    PLAYLISTS("Playlists"),
     ARTISTS("Artists"),
-    LASTFM_ARTISTS("Last.fm Top Artists"),
-    LASTFM_ALBUMS("Last.fm Top Albums")
+    PLAYLISTS("Playlists"),
+    TRACKS("Tracks"),
+    GENRES("Genres")
+}
+
+enum class DataSource(val displayName: String) {
+    SUBSONIC("Library"),
+    LASTFM("Last.fm")
 }
 
 enum class LastFmPeriod(val displayName: String, val apiValue: String) {
@@ -88,18 +93,33 @@ data class LastFmMatchedAlbum(
     val coverArtUrl: String?
 )
 
+/** LastFM track cross-referenced with Subsonic library. subsonicId is null if not found locally. */
+data class LastFmMatchedTrack(
+    val name: String,
+    val artistName: String,
+    val playCount: Long,
+    val subsonicId: String?,
+    val coverArtUrl: String?
+)
+
+data class GenreItem(val name: String, val songCount: Int, val albumCount: Int)
+
 sealed class SectionItems {
     data class Albums(val items: List<AlbumDto>) : SectionItems()
     data class Playlists(val items: List<PlaylistDto>) : SectionItems()
     data class Artists(val items: List<ArtistDto>) : SectionItems()
     data class LastFmTopArtists(val items: List<LastFmMatchedArtist>) : SectionItems()
     data class LastFmTopAlbums(val items: List<LastFmMatchedAlbum>) : SectionItems()
+    data class LastFmTopTracks(val items: List<LastFmMatchedTrack>) : SectionItems()
+    data class Genres(val items: List<GenreItem>) : SectionItems()
     fun isEmpty() = when (this) {
         is Albums           -> items.isEmpty()
         is Playlists        -> items.isEmpty()
         is Artists          -> items.isEmpty()
         is LastFmTopArtists -> items.isEmpty()
         is LastFmTopAlbums  -> items.isEmpty()
+        is LastFmTopTracks  -> items.isEmpty()
+        is Genres           -> items.isEmpty()
     }
 }
 
@@ -126,7 +146,8 @@ data class HomeSectionConfig(
     val artistSortType: ArtistSortType = ArtistSortType.ALPHABETICAL,
     val artistGenre: String? = null,
     // Last.fm-specific
-    val lastFmPeriod: LastFmPeriod = LastFmPeriod.MONTH
+    val lastFmPeriod: LastFmPeriod = LastFmPeriod.MONTH,
+    val dataSource: DataSource = DataSource.SUBSONIC
 )
 
 val DEFAULT_HOME_SECTIONS = listOf(
@@ -157,7 +178,8 @@ private data class SectionConfigJson(
     val yearTo: Int? = null,
     val artistSortType: String = "ALPHABETICAL",
     val artistGenre: String? = null,
-    val lastFmPeriod: String = "MONTH"
+    val lastFmPeriod: String = "MONTH",
+    val dataSource: String = "SUBSONIC"
 )
 
 private val gson = Gson()
@@ -174,7 +196,8 @@ fun List<HomeSectionConfig>.toJson(): String = gson.toJson(map { c ->
         minPlayCount = c.minPlayCount, starredOnly = c.starredOnly,
         yearFrom = c.yearFrom, yearTo = c.yearTo,
         artistSortType = c.artistSortType.name, artistGenre = c.artistGenre,
-        lastFmPeriod = c.lastFmPeriod.name
+        lastFmPeriod = c.lastFmPeriod.name,
+        dataSource = c.dataSource.name
     )
 })
 
@@ -182,10 +205,16 @@ fun String.toHomeSectionConfigs(): List<HomeSectionConfig> =
     runCatching {
         val serialized: List<SectionConfigJson> = gson.fromJson(this, jsonListType)
         serialized.map { s ->
+            // Migration: old LASTFM_ARTISTS/LASTFM_ALBUMS → new contentType + dataSource
+            val (migratedContentType, migratedDataSource) = when (s.contentType) {
+                "LASTFM_ARTISTS" -> "ARTISTS" to "LASTFM"
+                "LASTFM_ALBUMS"  -> "ALBUMS"  to "LASTFM"
+                else             -> s.contentType to s.dataSource
+            }
             HomeSectionConfig(
                 id = s.id,
                 title = s.title,
-                contentType = SectionContentType.entries.find { it.name == s.contentType }
+                contentType = SectionContentType.entries.find { it.name == migratedContentType }
                     ?: SectionContentType.ALBUMS,
                 sortType = AlbumSortType.entries.find { it.name == s.sortType }
                     ?: AlbumSortType.RECENTLY_ADDED,
@@ -207,7 +236,9 @@ fun String.toHomeSectionConfigs(): List<HomeSectionConfig> =
                     ?: ArtistSortType.ALPHABETICAL,
                 artistGenre = s.artistGenre,
                 lastFmPeriod = LastFmPeriod.entries.find { it.name == s.lastFmPeriod }
-                    ?: LastFmPeriod.MONTH
+                    ?: LastFmPeriod.MONTH,
+                dataSource = DataSource.entries.find { it.name == migratedDataSource }
+                    ?: DataSource.SUBSONIC
             )
         }
     }.getOrElse { DEFAULT_HOME_SECTIONS }

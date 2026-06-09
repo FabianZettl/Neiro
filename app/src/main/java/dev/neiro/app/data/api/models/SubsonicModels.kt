@@ -248,3 +248,23 @@ data class ArtistInfo2ApiResponse(
     @SerializedName("subsonic-response")
     val response: ArtistInfo2ResponseBody
 )
+
+// ── getGenres ────────────────────────────────────────────────────────────────
+
+data class GenreDto(
+    val value: String = "",
+    val songCount: Int = 0,
+    val albumCount: Int = 0
+)
+
+data class GenresData(@SerializedName("genre") val genres: List<GenreDto>? = null)
+
+data class GenresResponseBody(
+    val genres: GenresData? = null,
+    val status: String = "",
+    val version: String = ""
+)
+
+data class GenresApiResponse(
+    @SerializedName("subsonic-response") val response: GenresResponseBody? = null
+)

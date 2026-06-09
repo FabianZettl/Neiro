@@ -7,6 +7,7 @@ import dev.neiro.app.data.api.models.LastFmSessionResponse
 import dev.neiro.app.data.api.models.LastFmStatusResponse
 import dev.neiro.app.data.api.models.LastFmTopAlbumsResponse
 import dev.neiro.app.data.api.models.LastFmTopArtistsResponse
+import dev.neiro.app.data.api.models.LastFmTopTracksResponse
 import dev.neiro.app.data.api.models.LastFmTrackInfoResponse
 import dev.neiro.app.data.api.models.LastFmUserInfoResponse
 import retrofit2.http.Field
@@ -26,6 +27,16 @@ interface LastFmApi {
         @Query("api_key") apiKey: String,
         @Query("format") format: String = "json"
     ): LastFmTopArtistsResponse
+
+    @GET(".")
+    suspend fun getTopTracks(
+        @Query("method") method: String = "user.getTopTracks",
+        @Query("user") user: String,
+        @Query("api_key") apiKey: String,
+        @Query("period") period: String = "1month",
+        @Query("limit") limit: Int = 20,
+        @Query("format") format: String = "json"
+    ): LastFmTopTracksResponse
 
     @GET(".")
     suspend fun getTopAlbums(

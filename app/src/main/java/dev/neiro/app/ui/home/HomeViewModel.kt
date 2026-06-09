@@ -119,68 +119,75 @@ class HomeViewModel @Inject constructor(
                     async {
                         val items: SectionItems = when (config.contentType) {
                             SectionContentType.ALBUMS -> {
-                                val albums = runCatching {
-                                    musicRepository.getAlbumsByFilter(config)
-                                }.getOrElse { emptyList() }
-                                SectionItems.Albums(albums)
-                            }
-                            SectionContentType.PLAYLISTS -> {
-                                val playlists = runCatching {
-                                    musicRepository.getPlaylists()
-                                }.getOrElse { emptyList() }
-                                SectionItems.Playlists(playlists)
+                                if (config.dataSource == DataSource.LASTFM) {
+                                    val lfmAlbums = lastFmRepository
+                                        .getTopAlbums(config.lastFmPeriod.apiValue, config.size)
+                                        ?.topAlbums?.albums.orEmpty()
+                                    val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
+                                    val matched = lfmAlbums.map { lfm ->
+                                        val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
+                                        LastFmMatchedAlbum(
+                                            name = lfm.name, artistName = lfm.artist.name,
+                                            playCount = lfm.playCountInt,
+                                            subsonicId = sub?.id,
+                                            coverArtUrl = sub?.coverArtUrl ?: lfm.imageUrl
+                                        )
+                                    }
+                                    SectionItems.LastFmTopAlbums(matched)
+                                } else {
+                                    SectionItems.Albums(runCatching { musicRepository.getAlbumsByFilter(config) }.getOrElse { emptyList() })
+                                }
                             }
                             SectionContentType.ARTISTS -> {
-                                val artists = runCatching {
-                                    var list = musicRepository.getAllArtists()
-                                    if (!config.artistGenre.isNullOrBlank()) {
-                                        val artistIds = musicRepository.getArtistIdsByGenre(config.artistGenre)
-                                        list = list.filter { it.id in artistIds }
+                                if (config.dataSource == DataSource.LASTFM) {
+                                    val lfmArtists = lastFmRepository
+                                        .getTopArtists(config.lastFmPeriod.apiValue, config.size)
+                                        ?.topArtists?.artists.orEmpty()
+                                    val subsonicArtists = runCatching { musicRepository.getAllArtists() }.getOrElse { emptyList() }
+                                    val artistMap = subsonicArtists.associateBy { it.name.lowercase() }
+                                    val matched = lfmArtists.map { lfm ->
+                                        val sub = artistMap[lfm.name.lowercase()]
+                                        LastFmMatchedArtist(name = lfm.name, playCount = lfm.playCountInt, subsonicId = sub?.id, coverArtUrl = sub?.coverArtUrl)
                                     }
-                                    list = when (config.artistSortType) {
-                                        ArtistSortType.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
-                                        ArtistSortType.ALBUM_COUNT  -> list.sortedByDescending { it.albumCount }
-                                        ArtistSortType.RANDOM       -> list.shuffled()
-                                    }
-                                    list.take(config.size)
-                                }.getOrElse { emptyList() }
-                                SectionItems.Artists(artists)
+                                    SectionItems.LastFmTopArtists(matched)
+                                } else {
+                                    val artists = runCatching {
+                                        var list = musicRepository.getAllArtists()
+                                        if (!config.artistGenre.isNullOrBlank()) {
+                                            val ids = musicRepository.getArtistIdsByGenre(config.artistGenre)
+                                            list = list.filter { it.id in ids }
+                                        }
+                                        list = when (config.artistSortType) {
+                                            ArtistSortType.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
+                                            ArtistSortType.ALBUM_COUNT  -> list.sortedByDescending { it.albumCount }
+                                            ArtistSortType.RANDOM       -> list.shuffled()
+                                        }
+                                        list.take(config.size)
+                                    }.getOrElse { emptyList() }
+                                    SectionItems.Artists(artists)
+                                }
                             }
-                            SectionContentType.LASTFM_ARTISTS -> {
-                                val lfmArtists = lastFmRepository
-                                    .getTopArtists(config.lastFmPeriod.apiValue, config.size)
-                                    ?.topArtists?.artists.orEmpty()
-                                // Cross-reference with Subsonic library for images + navigation
-                                val subsonicArtists = runCatching { musicRepository.getAllArtists() }.getOrElse { emptyList() }
-                                val artistMap = subsonicArtists.associateBy { it.name.lowercase() }
-                                val matched = lfmArtists.map { lfm ->
-                                    val sub = artistMap[lfm.name.lowercase()]
-                                    LastFmMatchedArtist(
-                                        name = lfm.name,
-                                        playCount = lfm.playCountInt,
-                                        subsonicId = sub?.id,
-                                        coverArtUrl = sub?.coverArtUrl
+                            SectionContentType.PLAYLISTS -> {
+                                SectionItems.Playlists(runCatching { musicRepository.getPlaylists() }.getOrElse { emptyList() })
+                            }
+                            SectionContentType.TRACKS -> {
+                                val lfmTracks = lastFmRepository
+                                    .getTopTracks(config.lastFmPeriod.apiValue, config.size)
+                                    ?.topTracks?.tracks.orEmpty()
+                                val matched = lfmTracks.map { lfm ->
+                                    val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
+                                    val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
+                                    LastFmMatchedTrack(
+                                        name = lfm.name, artistName = lfm.artist.name,
+                                        playCount = lfm.playCountLong,
+                                        subsonicId = best?.id,
+                                        coverArtUrl = best?.coverArtUrl
                                     )
                                 }
-                                SectionItems.LastFmTopArtists(matched)
+                                SectionItems.LastFmTopTracks(matched)
                             }
-                            SectionContentType.LASTFM_ALBUMS -> {
-                                val lfmAlbums = lastFmRepository
-                                    .getTopAlbums(config.lastFmPeriod.apiValue, config.size)
-                                    ?.topAlbums?.albums.orEmpty()
-                                // Cross-reference: fetch 500 albums alphabetically and match by name+artist
-                                val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
-                                val matched = lfmAlbums.map { lfm ->
-                                    val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
-                                    LastFmMatchedAlbum(
-                                        name = lfm.name,
-                                        artistName = lfm.artist.name,
-                                        playCount = lfm.playCountInt,
-                                        subsonicId = sub?.id,
-                                        coverArtUrl = sub?.coverArtUrl ?: lfm.imageUrl
-                                    )
-                                }
-                                SectionItems.LastFmTopAlbums(matched)
+                            SectionContentType.GENRES -> {
+                                SectionItems.Genres(runCatching { musicRepository.getGenres() }.getOrElse { emptyList() })
                             }
                         }
                         SectionContent(config, items)

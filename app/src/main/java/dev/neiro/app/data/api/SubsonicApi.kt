@@ -5,6 +5,7 @@ import dev.neiro.app.data.api.models.AlbumList2ApiResponse
 import dev.neiro.app.data.api.models.ArtistDetailApiResponse
 import dev.neiro.app.data.api.models.ArtistInfo2ApiResponse
 import dev.neiro.app.data.api.models.ArtistsApiResponse
+import dev.neiro.app.data.api.models.GenresApiResponse
 import dev.neiro.app.data.api.models.PingApiResponse
 import dev.neiro.app.data.api.models.PlaylistApiResponse
 import dev.neiro.app.data.api.models.PlaylistsApiResponse
@@ -80,4 +81,7 @@ interface SubsonicApi {
         @Query("id") id: String? = null,
         @Query("albumId") albumId: String? = null
     ): PingApiResponse
+
+    @GET("rest/getGenres")
+    suspend fun getGenres(): GenresApiResponse
 }

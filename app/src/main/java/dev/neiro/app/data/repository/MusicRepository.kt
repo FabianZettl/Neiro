@@ -4,6 +4,7 @@ import dev.neiro.app.data.api.SubsonicApi
 import dev.neiro.app.data.api.SubsonicAuthInterceptor
 import dev.neiro.app.data.api.models.AlbumDto
 import dev.neiro.app.ui.home.AlbumSortType
+import dev.neiro.app.ui.home.GenreItem
 import dev.neiro.app.ui.home.HomeSectionConfig
 import java.time.Instant
 import dev.neiro.app.data.api.models.ArtistDto
@@ -181,6 +182,18 @@ class MusicRepository @Inject constructor(
             )
         }
     }
+
+    suspend fun getGenres(): List<GenreItem> = runCatching {
+        api.getGenres().response?.genres?.genres.orEmpty()
+            .sortedByDescending { it.albumCount }
+            .map { GenreItem(it.value, it.songCount, it.albumCount) }
+    }.getOrElse { emptyList() }
+
+    suspend fun searchSongs(query: String, artistQuery: String = ""): List<SongDto> = runCatching {
+        val q = if (artistQuery.isNotBlank()) "$query $artistQuery" else query
+        api.search3(q, songCount = 5, albumCount = 0, artistCount = 0)
+            .response.searchResult3.song
+    }.getOrElse { emptyList() }
 
     suspend fun starAlbum(albumId: String) = runCatching { api.star(albumId = albumId) }
     suspend fun unstarAlbum(albumId: String) = runCatching { api.unstar(albumId = albumId) }
