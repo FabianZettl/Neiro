@@ -169,8 +169,12 @@ fun HomeScreen(
 
                         // Section header
                         item(key = "header_${sectionContent.config.id}") {
+                            val categoryLabel = when (sectionContent.config.dataSource) {
+                                DataSource.LASTFM -> "LAST.FM · ${sectionContent.config.contentType.displayName.uppercase()}"
+                                DataSource.SUBSONIC -> sectionContent.config.contentType.displayName.uppercase()
+                            }
                             SectionHeader(
-                                category = "LIBRARY",
+                                category = categoryLabel,
                                 title = sectionContent.config.title
                             )
                         }
