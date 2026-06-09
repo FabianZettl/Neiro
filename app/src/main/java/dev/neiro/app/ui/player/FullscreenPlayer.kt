@@ -50,7 +50,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -96,8 +100,14 @@ fun FullscreenPlayer(
         (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
     else 0f
 
+    val scope = rememberCoroutineScope()
+    var seekJob by remember { mutableStateOf<Job?>(null) }
     var isSeeking by remember { mutableStateOf(false) }
+    // Single source of truth for the slider; synced from progress when not seeking
     var seekValue by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(progress) {
+        if (!isSeeking) seekValue = progress
+    }
 
     // Album art scale animation: slightly smaller when paused
     val artScale by animateFloatAsState(
@@ -297,14 +307,21 @@ fun FullscreenPlayer(
                     // ── Seek bar ───────────────────────────────────────
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Slider(
-                            value = if (isSeeking) seekValue else progress,
+                            value = seekValue,
                             onValueChange = { v ->
+                                seekJob?.cancel()
                                 isSeeking = true
                                 seekValue = v
                             },
                             onValueChangeFinished = {
                                 viewModel.seekTo((seekValue * state.durationMs).toLong())
-                                isSeeking = false
+                                // Hold off syncing from player for 600 ms so the position
+                                // update from the player has time to arrive before we let
+                                // progress override seekValue again.
+                                seekJob = scope.launch {
+                                    delay(600)
+                                    isSeeking = false
+                                }
                             },
                             colors = SliderDefaults.colors(
                                 thumbColor = Color.White,
@@ -318,7 +335,7 @@ fun FullscreenPlayer(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = formatMs(state.positionMs),
+                                text = formatMs(if (isSeeking) (seekValue * state.durationMs).toLong() else state.positionMs),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.6f)
                             )
