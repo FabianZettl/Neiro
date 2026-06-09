@@ -4,6 +4,9 @@ import com.google.gson.annotations.SerializedName
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
+/** OpenSubsonic multi-genre entry (e.g. from `genres[]` in album/song responses). */
+data class ItemGenre(val name: String = "")
+
 data class SubsonicError(
     val code: Int = 0,
     val message: String = ""
@@ -20,11 +23,20 @@ data class AlbumDto(
     val duration: Int = 0,
     val year: Int? = null,
     val genre: String? = null,
+    /** OpenSubsonic extension: all genre tags for this album. */
+    val genres: List<ItemGenre> = emptyList(),
     val song: List<SongDto> = emptyList(),
     val starred: String? = null,
     val playCount: Int? = null,
     val played: String? = null,   // ISO 8601 datetime of last play, e.g. "2024-03-15T10:30:00"
-)
+) {
+    /** All genre names: merges legacy `genre` field with OpenSubsonic `genres` array. */
+    fun allGenres(): List<String> {
+        val fromArray = genres.map { it.name }
+        val fromField = listOfNotNull(genre)
+        return (fromArray + fromField).distinct()
+    }
+}
 
 data class SongDto(
     val id: String = "",

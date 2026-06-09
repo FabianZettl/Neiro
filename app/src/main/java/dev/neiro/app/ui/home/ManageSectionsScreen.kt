@@ -338,7 +338,7 @@ private fun SectionCard(
 
                         // Subsonic-only filters (genre, year, etc.)
                         if (!albumUsesLastFm) {
-                            FilterLabel("Genre (leave empty for all)")
+                            FilterLabel("Genre (contains match, leave empty for all)")
                             OutlinedTextField(
                                 value = config.genre ?: "",
                                 onValueChange = { v -> onUpdate { it.copy(genre = v.takeIf { it.isNotBlank() }) } },
@@ -462,7 +462,7 @@ private fun SectionCard(
                                 }
                             }
                         } else {
-                            FilterLabel("Genre (filters artists by their albums)")
+                            FilterLabel("Genre (contains match, filters artists by their albums)")
                             OutlinedTextField(
                                 value = config.artistGenre ?: "",
                                 onValueChange = { v -> onUpdate { it.copy(artistGenre = v.takeIf { it.isNotBlank() }) } },

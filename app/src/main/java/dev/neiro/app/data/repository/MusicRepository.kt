@@ -52,7 +52,9 @@ class MusicRepository @Inject constructor(
             albums = albums.filter { it.starred != null }
         }
         if (config.genre != null) {
-            albums = albums.filter { it.genre?.contains(config.genre, ignoreCase = true) == true }
+            albums = albums.filter { album ->
+                album.allGenres().any { it.contains(config.genre, ignoreCase = true) }
+            }
         }
         if (config.minPlayCount != null) {
             albums = albums.filter { (it.playCount ?: 0) >= config.minPlayCount }
@@ -137,7 +139,7 @@ class MusicRepository @Inject constructor(
             api.getAlbumList2(type = "alphabeticalByName", size = 500)
         }.getOrNull() ?: return emptySet()
         return result.response.albumList2?.album.orEmpty()
-            .filter { it.genre?.contains(genre, ignoreCase = true) == true }
+            .filter { album -> album.allGenres().any { it.contains(genre, ignoreCase = true) } }
             .mapNotNull { it.artistId }
             .toSet()
     }
