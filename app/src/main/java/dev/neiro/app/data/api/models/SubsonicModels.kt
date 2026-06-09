@@ -268,3 +268,19 @@ data class GenresResponseBody(
 data class GenresApiResponse(
     @SerializedName("subsonic-response") val response: GenresResponseBody? = null
 )
+
+// ── getSimilarSongs2 ──────────────────────────────────────────────────────────
+
+data class SimilarSongsContainer(
+    @SerializedName("song") val songs: List<SongDto> = emptyList()
+)
+
+data class SimilarSongsResponseBody(
+    val status: String = "",
+    val similarSongs2: SimilarSongsContainer = SimilarSongsContainer(),
+    val error: SubsonicError? = null
+)
+
+data class SimilarSongsApiResponse(
+    @SerializedName("subsonic-response") val response: SimilarSongsResponseBody
+)

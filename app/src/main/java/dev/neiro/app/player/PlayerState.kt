@@ -14,5 +14,6 @@ data class PlayerState(
     val isConnected: Boolean = false,
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
+    val autoDjEnabled: Boolean = true,
     val error: String? = null
 )

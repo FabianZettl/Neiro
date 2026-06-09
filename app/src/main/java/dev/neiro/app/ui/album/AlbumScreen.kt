@@ -38,7 +38,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -62,7 +65,7 @@ import coil.compose.AsyncImage
 import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.ui.player.PlayerViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AlbumScreen(
     navController: NavController,
@@ -211,6 +214,27 @@ fun AlbumScreen(
                                 Icon(Icons.Default.Shuffle, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Shuffle", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+
+                    // ── LastFM genre tags ──────────────────────────────────────
+                    val albumTags = lastFm?.tags?.tags?.map { it.name }
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: listOfNotNull(album.genre?.takeIf { it.isNotBlank() })
+                    if (albumTags.isNotEmpty()) {
+                        item {
+                            FlowRow(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                albumTags.take(6).forEach { tag ->
+                                    SuggestionChip(
+                                        onClick = {},
+                                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) }
+                                    )
+                                }
                             }
                         }
                     }

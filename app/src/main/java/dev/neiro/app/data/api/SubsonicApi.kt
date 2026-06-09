@@ -10,6 +10,7 @@ import dev.neiro.app.data.api.models.PingApiResponse
 import dev.neiro.app.data.api.models.PlaylistApiResponse
 import dev.neiro.app.data.api.models.PlaylistsApiResponse
 import dev.neiro.app.data.api.models.Search3ApiResponse
+import dev.neiro.app.data.api.models.SimilarSongsApiResponse
 import dev.neiro.app.data.api.models.SongApiResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
@@ -84,4 +85,10 @@ interface SubsonicApi {
 
     @GET("rest/getGenres")
     suspend fun getGenres(): GenresApiResponse
+
+    @GET("rest/getSimilarSongs2")
+    suspend fun getSimilarSongs2(
+        @Query("id") songId: String,
+        @Query("count") count: Int = 20
+    ): SimilarSongsApiResponse
 }

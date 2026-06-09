@@ -15,6 +15,7 @@ import dev.neiro.app.data.api.SubsonicAuthInterceptor
 import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
+import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ import javax.inject.Singleton
 class PlayerController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val preferences: NieroPreferences,
+    private val musicRepository: MusicRepository,
     @ApplicationScope private val scope: CoroutineScope
 ) {
     private val _controller = MutableStateFlow<MediaController?>(null)
@@ -54,6 +56,11 @@ class PlayerController @Inject constructor(
     // True while we're replacing the current MediaItem due to a seek.
     // Prevents onMediaItemTransition from resetting position/offset on that event.
     @Volatile private var seekInProgress = false
+
+    // AutoDJ — prevent concurrent fetch jobs
+    @Volatile private var autoDjRunning = false
+
+    var autoDjEnabled: Boolean = true
 
     init {
         scope.launch(Dispatchers.Main) {
@@ -122,7 +129,6 @@ class PlayerController @Inject constructor(
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (seekInProgress) {
-                    // This transition was triggered by our own replaceMediaItem seek — skip reset.
                     seekInProgress = false
                     return
                 }
@@ -135,6 +141,11 @@ class PlayerController @Inject constructor(
                     positionMs = 0L,
                     durationMs = song?.duration?.times(1000L) ?: 0L
                 )
+                // AutoDJ: when only 1 song remains in the queue, fetch similar songs
+                val remaining = controller.mediaItemCount - index - 1
+                if (autoDjEnabled && remaining <= 1 && song != null) {
+                    triggerAutoDj(song)
+                }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -290,6 +301,37 @@ class PlayerController @Inject constructor(
             // replaceMediaItem resets ExoPlayer's position to 0 of the new item — exactly
             // what we want since the server now starts from timeOffset.
             if (wasPlaying) exo.play()
+        }
+    }
+
+    fun toggleAutoDj() {
+        autoDjEnabled = !autoDjEnabled
+        _playerState.value = _playerState.value.copy(autoDjEnabled = autoDjEnabled)
+    }
+
+    private fun triggerAutoDj(seedSong: SongDto) {
+        if (autoDjRunning) return
+        autoDjRunning = true
+        scope.launch(Dispatchers.Main) {
+            try {
+                val similar = musicRepository.getSimilarSongs(seedSong.id, count = 10)
+                if (similar.isEmpty()) return@launch
+                val prefs = preferences.prefsFlow.first()
+                val controller = _controller.value ?: return@launch
+                // Filter out songs already in the queue to avoid duplicates
+                val currentIds = currentQueue.map { it.id }.toSet()
+                val toAdd = similar.filter { it.id !in currentIds }.take(5)
+                toAdd.forEach { song ->
+                    controller.addMediaItem(buildMediaItem(song, prefs))
+                }
+                currentQueue = currentQueue + toAdd
+                _playerState.value = _playerState.value.copy(queue = currentQueue)
+                Log.d("NieroPlayer", "AutoDJ added ${toAdd.size} similar songs")
+            } catch (e: Exception) {
+                Log.e("NieroPlayer", "AutoDJ failed", e)
+            } finally {
+                autoDjRunning = false
+            }
         }
     }
 

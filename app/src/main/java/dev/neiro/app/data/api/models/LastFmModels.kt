@@ -70,11 +70,21 @@ data class LastFmArtistStats(
     @SerializedName("userplaycount") val userPlayCount: String = "0"
 )
 
+data class LastFmTag(
+    @SerializedName("name") val name: String = "",
+    @SerializedName("url")  val url: String  = ""
+)
+
+data class LastFmTagList(
+    @SerializedName("tag") val tags: List<LastFmTag> = emptyList()
+)
+
 data class LastFmArtistInfo(
     @SerializedName("name") val name: String = "",
     @SerializedName("url") val url: String = "",
     @SerializedName("stats") val stats: LastFmArtistStats = LastFmArtistStats(),
-    @SerializedName("image") val images: List<LastFmImage> = emptyList()
+    @SerializedName("image") val images: List<LastFmImage> = emptyList(),
+    @SerializedName("tags") val tags: LastFmTagList = LastFmTagList()
 )
 
 data class LastFmArtistInfoResponse(
@@ -96,7 +106,8 @@ data class LastFmAlbumInfo(
     @SerializedName("listeners") val listeners: String = "0",
     @SerializedName("playcount") val playCount: String = "0",
     @SerializedName("userplaycount") val userPlayCount: String = "0",
-    @SerializedName("image") val images: List<LastFmImage> = emptyList()
+    @SerializedName("image") val images: List<LastFmImage> = emptyList(),
+    @SerializedName("tags") val tags: LastFmTagList = LastFmTagList()
 )
 
 data class LastFmAlbumInfoResponse(

@@ -110,7 +110,10 @@ private fun ArtistDetailContent(
     onAlbumClick: (String) -> Unit
 ) {
     val albums = artist.album.orEmpty()
-    val genres = albums.mapNotNull { it.genre }.distinct()
+    // Prefer Last.fm tags; fall back to ID3 genres from album metadata
+    val tags = lastFmInfo?.tags?.tags?.map { it.name }?.take(6)
+        ?.takeIf { it.isNotEmpty() }
+        ?: albums.mapNotNull { it.genre }.distinct()
     val uriHandler = LocalUriHandler.current
 
     val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 88.dp
@@ -128,18 +131,18 @@ private fun ArtistDetailContent(
             )
         }
 
-        // ── Item 2: Genre chips ───────────────────────────────────────────────
-        if (genres.isNotEmpty()) {
+        // ── Item 2: Genre/tag chips ───────────────────────────────────────────
+        if (tags.isNotEmpty()) {
             item {
                 FlowRow(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    genres.forEach { genre ->
+                    tags.forEach { tag ->
                         SuggestionChip(
                             onClick = {},
-                            label = { Text(genre, style = MaterialTheme.typography.labelMedium) }
+                            label = { Text(tag, style = MaterialTheme.typography.labelMedium) }
                         )
                     }
                 }

@@ -195,6 +195,13 @@ class MusicRepository @Inject constructor(
             .response.searchResult3.song
     }.getOrElse { emptyList() }
 
+    suspend fun getSimilarSongs(songId: String, count: Int = 20): List<SongDto> = runCatching {
+        val prefs = preferences.prefsFlow.first()
+        api.getSimilarSongs2(songId, count).response.similarSongs2.songs.map { song ->
+            song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }.getOrElse { emptyList() }
+
     suspend fun starAlbum(albumId: String) = runCatching { api.star(albumId = albumId) }
     suspend fun unstarAlbum(albumId: String) = runCatching { api.unstar(albumId = albumId) }
 

@@ -113,16 +113,35 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    // Sort types that have a meaningful Last.fm equivalent (play count / recency based).
+    // For these, we auto-prefer Last.fm when a session is configured, unless the user
+    // has explicitly forced DataSource.SUBSONIC.
+    private val lastFmStatSorts = setOf(
+        AlbumSortType.MOST_PLAYED,
+        AlbumSortType.RECENTLY_PLAYED
+    )
+
     private suspend fun loadSections(configs: List<HomeSectionConfig>) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         try {
+            val hasLastFm = lastFmRepository.isSessionConfigured()
             val enabledConfigs = configs.filter { it.enabled }
             coroutineScope {
                 val sections = enabledConfigs.map { config ->
                     async {
+                        // Determine effective data source:
+                        // – If the user explicitly chose SUBSONIC, always use Subsonic.
+                        // – Otherwise, if LastFM is configured AND the sort type has a
+                        //   LastFM equivalent, auto-use LastFM.
+                        val useLastFm = hasLastFm && config.dataSource != DataSource.SUBSONIC &&
+                            (config.dataSource == DataSource.LASTFM ||
+                             (config.contentType == SectionContentType.ALBUMS && config.sortType in lastFmStatSorts) ||
+                             (config.contentType == SectionContentType.ARTISTS) ||
+                             (config.contentType == SectionContentType.TRACKS))
+
                         val items: SectionItems = when (config.contentType) {
                             SectionContentType.ALBUMS -> {
-                                if (config.dataSource == DataSource.LASTFM) {
+                                if (useLastFm) {
                                     val lfmAlbums = lastFmRepository
                                         .getTopAlbums(config.lastFmPeriod.apiValue, config.size)
                                         ?.topAlbums?.albums.orEmpty()
@@ -142,7 +161,7 @@ class HomeViewModel @Inject constructor(
                                 }
                             }
                             SectionContentType.ARTISTS -> {
-                                if (config.dataSource == DataSource.LASTFM) {
+                                if (useLastFm) {
                                     val lfmArtists = lastFmRepository
                                         .getTopArtists(config.lastFmPeriod.apiValue, config.size)
                                         ?.topArtists?.artists.orEmpty()
@@ -174,21 +193,25 @@ class HomeViewModel @Inject constructor(
                                 SectionItems.Playlists(runCatching { musicRepository.getPlaylists() }.getOrElse { emptyList() })
                             }
                             SectionContentType.TRACKS -> {
-                                val lfmTracks = lastFmRepository
-                                    .getTopTracks(config.lastFmPeriod.apiValue, config.size)
-                                    ?.topTracks?.tracks.orEmpty()
-                                val matched = lfmTracks.map { lfm ->
-                                    val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
-                                    val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
-                                    LastFmMatchedTrack(
-                                        name = lfm.name, artistName = lfm.artist.name,
-                                        playCount = lfm.playCountLong,
-                                        subsonicId = best?.id,
-                                        albumId = best?.albumId,
-                                        coverArtUrl = best?.coverArtUrl
-                                    )
+                                if (useLastFm) {
+                                    val lfmTracks = lastFmRepository
+                                        .getTopTracks(config.lastFmPeriod.apiValue, config.size)
+                                        ?.topTracks?.tracks.orEmpty()
+                                    val matched = lfmTracks.map { lfm ->
+                                        val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
+                                        val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
+                                        LastFmMatchedTrack(
+                                            name = lfm.name, artistName = lfm.artist.name,
+                                            playCount = lfm.playCountLong,
+                                            subsonicId = best?.id,
+                                            albumId = best?.albumId,
+                                            coverArtUrl = best?.coverArtUrl
+                                        )
+                                    }
+                                    SectionItems.LastFmTopTracks(matched)
+                                } else {
+                                    SectionItems.LastFmTopTracks(emptyList())
                                 }
-                                SectionItems.LastFmTopTracks(matched)
                             }
                             SectionContentType.GENRES -> {
                                 SectionItems.Genres(runCatching { musicRepository.getGenres() }.getOrElse { emptyList() })

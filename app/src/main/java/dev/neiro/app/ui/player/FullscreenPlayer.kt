@@ -52,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -472,6 +473,8 @@ fun FullscreenPlayer(
                 QueueSheet(
                     queue = state.queue,
                     currentIndex = state.queueIndex,
+                    autoDjEnabled = state.autoDjEnabled,
+                    onToggleAutoDj = { viewModel.toggleAutoDj() },
                     onTrackClick = { index ->
                         viewModel.seekToQueueItem(index)
                     },
@@ -486,6 +489,8 @@ fun FullscreenPlayer(
 private fun QueueSheet(
     queue: List<dev.neiro.app.data.api.models.SongDto>,
     currentIndex: Int,
+    autoDjEnabled: Boolean,
+    onToggleAutoDj: () -> Unit,
     onTrackClick: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -497,12 +502,34 @@ private fun QueueSheet(
     }
 
     Column(modifier = Modifier.navigationBarsPadding()) {
-        Text(
-            text = "Up Next",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Up Next",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "AutoDJ",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (autoDjEnabled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Switch(
+                    checked = autoDjEnabled,
+                    onCheckedChange = { onToggleAutoDj() }
+                )
+            }
+        }
         HorizontalDivider()
         LazyColumn(
             state = listState,

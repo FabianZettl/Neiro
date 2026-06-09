@@ -87,6 +87,7 @@ class PlayerViewModel @Inject constructor(
     fun seekToQueueItem(index: Int) = playerController.seekToQueueItem(index)
     fun toggleShuffle() = playerController.toggleShuffle()
     fun cycleRepeat() = playerController.cycleRepeat()
+    fun toggleAutoDj() = playerController.toggleAutoDj()
     fun playNext(song: SongDto) = viewModelScope.launch { playerController.playNext(song) }
     fun addToQueue(song: SongDto) = viewModelScope.launch { playerController.addToQueue(song) }
 }

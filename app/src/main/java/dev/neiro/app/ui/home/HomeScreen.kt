@@ -212,10 +212,10 @@ fun HomeScreen(
                                     }
                                 }
 
-                                SectionLayout.LIST -> {
-                                    items(
-                                        items.items,
-                                        key = { "list_${sectionContent.config.id}_${it.id}" }
+                                SectionLayout.LIST -> item(key = "list_${sectionContent.config.id}") {
+                                    MultiColumnList(
+                                        items = items.items,
+                                        itemsPerColumn = 4
                                     ) { album ->
                                         AlbumListRow(
                                             album = album,
@@ -249,10 +249,10 @@ fun HomeScreen(
                                     }
                                 }
 
-                                SectionLayout.LIST -> {
-                                    items(
-                                        items.items,
-                                        key = { "list_${sectionContent.config.id}_${it.id}" }
+                                SectionLayout.LIST -> item(key = "list_${sectionContent.config.id}") {
+                                    MultiColumnList(
+                                        items = items.items,
+                                        itemsPerColumn = 4
                                     ) { playlist ->
                                         PlaylistListRow(
                                             playlist = playlist,
@@ -286,10 +286,10 @@ fun HomeScreen(
                                     }
                                 }
 
-                                SectionLayout.LIST -> {
-                                    items(
-                                        items.items,
-                                        key = { "list_${sectionContent.config.id}_${it.id}" }
+                                SectionLayout.LIST -> item(key = "list_${sectionContent.config.id}") {
+                                    MultiColumnList(
+                                        items = items.items,
+                                        itemsPerColumn = 4
                                     ) { artist ->
                                         ArtistListRow(
                                             artist = artist,
@@ -326,10 +326,16 @@ fun HomeScreen(
                                         itemSize = sectionContent.config.itemSize,
                                         onTrackClick = { track -> viewModel.playTopTrack(track) }
                                     )
-                                    SectionLayout.LIST -> LastFmTopTracksList(
-                                        tracks = items.items,
-                                        onTrackClick = { track -> viewModel.playTopTrack(track) }
-                                    )
+                                    SectionLayout.LIST -> MultiColumnList(
+                                        items = items.items,
+                                        itemsPerColumn = 4
+                                    ) { track ->
+                                        LastFmTrackListRow(
+                                            track = track,
+                                            index = items.items.indexOf(track),
+                                            onTrackClick = { viewModel.playTopTrack(track) }
+                                        )
+                                    }
                                 }
                             }
 
@@ -577,6 +583,34 @@ private fun GridRow(row: List<AlbumDto>, cols: Int = 2, itemShape: ItemShape = I
 }
 
 // ── LIST layout — Albums ──────────────────────────────────────────────────────
+
+// ── Multi-column horizontally scrollable list ─────────────────────────────────
+// Items are chunked into columns of `itemsPerColumn`. Columns are arranged
+// side by side in a horizontal scroll. 1 col for <4 items, 2 for <8, 3 for ≥8.
+
+@Composable
+private fun <T> MultiColumnList(
+    items: List<T>,
+    itemsPerColumn: Int = 4,
+    itemContent: @Composable (T) -> Unit
+) {
+    if (items.isEmpty()) return
+    val columns = items.chunked(itemsPerColumn)
+    val columnWidth = 280.dp  // each column is a fixed-width card
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 0.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(columns) { column ->
+            Column(modifier = Modifier.width(columnWidth)) {
+                column.forEach { item ->
+                    itemContent(item)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun AlbumListRow(album: AlbumDto, itemShape: ItemShape = ItemShape.ROUNDED, onAlbumClick: (AlbumDto) -> Unit) {
@@ -1089,64 +1123,61 @@ private fun LastFmTopTracksShelf(
     }
 }
 
-// ── Last.fm Top Tracks list ───────────────────────────────────────────────────
+// ── Last.fm single track row (used in MultiColumnList) ───────────────────────
 
 @Composable
-private fun LastFmTopTracksList(
-    tracks: List<LastFmMatchedTrack>,
-    onTrackClick: (LastFmMatchedTrack) -> Unit = {}
+private fun LastFmTrackListRow(
+    track: LastFmMatchedTrack,
+    index: Int,
+    onTrackClick: () -> Unit = {}
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        tracks.forEachIndexed { index, track ->
-            val isMatched = track.subsonicId != null
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (isMatched) Modifier.clickable { onTrackClick(track) } else Modifier)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(28.dp)
-                )
-                AsyncImage(
-                    model = track.coverArtUrl,
-                    contentDescription = track.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = track.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isMatched) MaterialTheme.colorScheme.onBackground
-                                else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = track.artistName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Text(
-                    text = "${track.playCount} plays",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
+    val isMatched = track.subsonicId != null
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isMatched) Modifier.clickable { onTrackClick() } else Modifier)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "${index + 1}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(28.dp)
+        )
+        AsyncImage(
+            model = track.coverArtUrl,
+            contentDescription = track.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isMatched) MaterialTheme.colorScheme.onBackground
+                        else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = track.artistName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        Text(
+            text = "${track.playCount}×",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
     }
 }
 
