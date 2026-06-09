@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.chrisbanes.haze.HazeState
@@ -67,17 +68,29 @@ import dev.neiro.app.ui.playlists.PlaylistDetailScreen
 import dev.neiro.app.ui.playlists.PlaylistsListScreen
 import dev.neiro.app.ui.search.SearchScreen
 import dev.neiro.app.ui.settings.SettingsScreen
+import dev.neiro.app.ui.onboarding.OnboardingScreen
+import dev.neiro.app.ui.startup.StartupViewModel
 import dev.neiro.app.ui.starred.StarredScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 
-private val noMiniPlayerRoutes = setOf("fullscreen_player")
+private val noMiniPlayerRoutes = setOf("fullscreen_player", "onboarding")
 private val noDrawerRoutes = setOf(
-    "fullscreen_player", "manage_sections",
+    "fullscreen_player", "manage_sections", "onboarding",
     "album/{albumId}", "artist/{artistId}", "playlist/{playlistId}"
 )
 
 @Composable
-fun NieroNavGraph() {
+fun NieroNavGraph(
+    startupViewModel: StartupViewModel = hiltViewModel()
+) {
+    val startDestination by produceState<String?>(initialValue = null) {
+        value = if (startupViewModel.isServerConfigured()) "home" else "onboarding"
+    }
+
+    // Wait until we've read the preferences before rendering NavHost
+    if (startDestination == null) return
+
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -112,11 +125,20 @@ fun NieroNavGraph() {
         ) {
             NavHost(
                 navController = navController,
-                startDestination = "home",
+                startDestination = startDestination!!,
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(hazeState)
             ) {
+                composable("onboarding") {
+                    OnboardingScreen(
+                        onComplete = {
+                            navController.navigate("home") {
+                                popUpTo("onboarding") { inclusive = true }
+                            }
+                        }
+                    )
+                }
                 composable("home") {
                     HomeScreen(navController = navController, onOpenDrawer = onOpenDrawer)
                 }

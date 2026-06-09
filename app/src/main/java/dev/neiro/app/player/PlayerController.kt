@@ -82,9 +82,32 @@ class PlayerController @Inject constructor(
     }
 
     private fun attachPlayerListener(controller: MediaController) {
+        // Sync initial shuffle/repeat state from player
+        _playerState.value = _playerState.value.copy(
+            shuffleEnabled = controller.shuffleModeEnabled,
+            repeatMode = when (controller.repeatMode) {
+                Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+                Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+                else -> RepeatMode.OFF
+            }
+        )
         controller.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _playerState.value = _playerState.value.copy(isPlaying = isPlaying)
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                _playerState.value = _playerState.value.copy(shuffleEnabled = shuffleModeEnabled)
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                _playerState.value = _playerState.value.copy(
+                    repeatMode = when (repeatMode) {
+                        Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+                        Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+                        else -> RepeatMode.OFF
+                    }
+                )
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -188,13 +211,43 @@ class PlayerController @Inject constructor(
         _controller.value?.seekToPreviousMediaItem()
     }
 
-    fun seekTo(positionMs: Long) {
+    fun seekToQueueItem(index: Int) {
         val controller = _controller.value ?: return
-        if (!controller.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
-            Log.w("NieroPlayer", "seekTo($positionMs) ignored — SEEK command not available (stream not seekable?)")
-            return
+        controller.seekTo(index, 0L)
+    }
+
+    fun toggleShuffle() {
+        val controller = _controller.value ?: return
+        val newShuffle = !controller.shuffleModeEnabled
+        controller.shuffleModeEnabled = newShuffle
+        _playerState.value = _playerState.value.copy(shuffleEnabled = newShuffle)
+    }
+
+    fun cycleRepeat() {
+        val controller = _controller.value ?: return
+        val next = when (_playerState.value.repeatMode) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
         }
-        controller.seekTo(positionMs)
+        controller.repeatMode = when (next) {
+            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        }
+        _playerState.value = _playerState.value.copy(repeatMode = next)
+    }
+
+    fun seekTo(positionMs: Long) {
+        // Call ExoPlayer directly — same process, no IPC round-trip.
+        // MediaController.seekTo() can silently drop seeks on live-transcoded HTTP streams
+        // because ExoPlayer marks them non-seekable until Content-Length is known.
+        val exo = NieroPlayerHolder.player
+        if (exo != null) {
+            exo.seekTo(positionMs)
+        } else {
+            _controller.value?.seekTo(positionMs)
+        }
         _playerState.value = _playerState.value.copy(positionMs = positionMs)
     }
 
@@ -240,18 +293,6 @@ class PlayerController @Inject constructor(
                     .setArtworkUri(song.coverArtUrl?.let { android.net.Uri.parse(it) })
                     .build()
             )
-
-        // Provide the known duration so ExoPlayer can seek even on transcoded streams
-        // where the HTTP response has no Content-Length (on-the-fly encoding).
-        // Without this, COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM is unavailable and every
-        // seekTo() call is silently dropped.
-        if (song.duration > 0) {
-            builder.setClippingConfiguration(
-                MediaItem.ClippingConfiguration.Builder()
-                    .setEndPositionMs(song.duration * 1000L)
-                    .build()
-            )
-        }
 
         return builder.build()
     }

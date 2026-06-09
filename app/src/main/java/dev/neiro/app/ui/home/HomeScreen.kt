@@ -315,7 +315,10 @@ fun HomeScreen(
                             }
 
                             is SectionItems.LastFmTopTracks -> item(key = "lfm_tracks_${sectionContent.config.id}") {
-                                LastFmTopTracksList(tracks = items.items)
+                                LastFmTopTracksList(
+                                    tracks = items.items,
+                                    onTrackClick = { track -> viewModel.playTopTrack(track) }
+                                )
                             }
 
                             is SectionItems.Genres -> item(key = "genres_${sectionContent.config.id}") {
@@ -1020,12 +1023,17 @@ private fun LastFmAlbumShelfRow(
 // ── Last.fm Top Tracks list ───────────────────────────────────────────────────
 
 @Composable
-private fun LastFmTopTracksList(tracks: List<LastFmMatchedTrack>) {
+private fun LastFmTopTracksList(
+    tracks: List<LastFmMatchedTrack>,
+    onTrackClick: (LastFmMatchedTrack) -> Unit = {}
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         tracks.forEachIndexed { index, track ->
+            val isMatched = track.subsonicId != null
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(if (isMatched) Modifier.clickable { onTrackClick(track) } else Modifier)
                     .padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1035,32 +1043,23 @@ private fun LastFmTopTracksList(tracks: List<LastFmMatchedTrack>) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(28.dp)
                 )
-                if (track.coverArtUrl != null) {
-                    AsyncImage(
-                        model = track.coverArtUrl,
-                        contentDescription = track.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                }
+                AsyncImage(
+                    model = track.coverArtUrl,
+                    contentDescription = track.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = track.name,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = if (isMatched) MaterialTheme.colorScheme.onBackground
+                                else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

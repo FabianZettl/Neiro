@@ -99,6 +99,7 @@ data class LastFmMatchedTrack(
     val artistName: String,
     val playCount: Long,
     val subsonicId: String?,
+    val albumId: String?,
     val coverArtUrl: String?
 )
 

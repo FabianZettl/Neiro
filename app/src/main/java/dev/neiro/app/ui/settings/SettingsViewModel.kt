@@ -257,4 +257,10 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
+
+    /** Saves only server credentials (used by onboarding). Does not ping. */
+    suspend fun saveServerSettings(serverUrl: String, username: String, password: String) {
+        val existing = preferences.prefsFlow.first()
+        preferences.savePrefs(existing.copy(serverUrl = serverUrl, username = username, password = password))
+    }
 }

@@ -31,6 +31,7 @@ class NieroMediaService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        NieroPlayerHolder.player = player
         mediaSession = MediaSession.Builder(this, player).build()
     }
 
@@ -39,6 +40,7 @@ class NieroMediaService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        NieroPlayerHolder.player = null
         mediaSession?.run {
             player.release()
             release()

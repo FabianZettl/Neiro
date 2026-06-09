@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -24,6 +25,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,16 +39,21 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +83,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import dev.neiro.app.player.RepeatMode
 import dev.neiro.app.ui.theme.DefaultNeiroPalette
 import dev.neiro.app.ui.theme.NieroTheme
 import dev.neiro.app.ui.theme.extractPalette
@@ -103,13 +114,11 @@ fun FullscreenPlayer(
     val scope = rememberCoroutineScope()
     var seekJob by remember { mutableStateOf<Job?>(null) }
     var isSeeking by remember { mutableStateOf(false) }
-    // Single source of truth for the slider; synced from progress when not seeking
     var seekValue by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(progress) {
         if (!isSeeking) seekValue = progress
     }
 
-    // Album art scale animation: slightly smaller when paused
     val artScale by animateFloatAsState(
         targetValue = if (state.isPlaying) 1.0f else 0.95f,
         animationSpec = spring(
@@ -118,6 +127,9 @@ fun FullscreenPlayer(
         ),
         label = "artScale"
     )
+
+    var showQueue by remember { mutableStateOf(false) }
+    val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     NieroTheme(palette = palette, darkTheme = true) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -173,12 +185,11 @@ fun FullscreenPlayer(
                         textAlign = TextAlign.Center,
                         letterSpacing = MaterialTheme.typography.labelSmall.letterSpacing
                     )
-                    // Queue stub icon — mirrors back button width
-                    IconButton(onClick = {}) {
+                    IconButton(onClick = { showQueue = true }) {
                         Icon(
                             Icons.Default.QueueMusic,
                             contentDescription = "Queue",
-                            tint = Color.White.copy(alpha = 0.7f),
+                            tint = if (state.queue.size > 1) Color.White else Color.White.copy(alpha = 0.4f),
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -278,7 +289,6 @@ fun FullscreenPlayer(
                                     }
                                 )
                             }
-                            // Last.fm play count
                             val userPlays = lastFm.info?.userPlayCountLong ?: 0L
                             if (userPlays > 0) {
                                 Spacer(Modifier.height(2.dp))
@@ -289,7 +299,6 @@ fun FullscreenPlayer(
                                 )
                             }
                         }
-                        // Love button — active when session connected
                         if (lastFm.hasSession) {
                             IconButton(onClick = { viewModel.toggleLove() }) {
                                 Icon(
@@ -315,9 +324,6 @@ fun FullscreenPlayer(
                             },
                             onValueChangeFinished = {
                                 viewModel.seekTo((seekValue * state.durationMs).toLong())
-                                // Hold off syncing from player for 600 ms so the position
-                                // update from the player has time to arrive before we let
-                                // progress override seekValue again.
                                 seekJob = scope.launch {
                                     delay(600)
                                     isSeeking = false
@@ -355,12 +361,12 @@ fun FullscreenPlayer(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Shuffle (stub)
-                        IconButton(onClick = {}) {
+                        // Shuffle
+                        IconButton(onClick = { viewModel.toggleShuffle() }) {
                             Icon(
                                 Icons.Default.Shuffle,
                                 contentDescription = "Shuffle",
-                                tint = Color.White.copy(alpha = 0.6f),
+                                tint = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -378,7 +384,7 @@ fun FullscreenPlayer(
                             )
                         }
 
-                        // Play / Pause — large filled circle
+                        // Play / Pause
                         Box(
                             modifier = Modifier
                                 .size(72.dp)
@@ -412,12 +418,17 @@ fun FullscreenPlayer(
                             )
                         }
 
-                        // Repeat (stub)
-                        IconButton(onClick = {}) {
+                        // Repeat — cycles OFF → ALL → ONE
+                        IconButton(onClick = { viewModel.cycleRepeat() }) {
+                            val (icon, tint) = when (state.repeatMode) {
+                                RepeatMode.OFF -> Icons.Default.Repeat to Color.White.copy(alpha = 0.5f)
+                                RepeatMode.ALL -> Icons.Default.Repeat to MaterialTheme.colorScheme.primary
+                                RepeatMode.ONE -> Icons.Default.RepeatOne to MaterialTheme.colorScheme.primary
+                            }
                             Icon(
-                                Icons.Default.Repeat,
+                                icon,
                                 contentDescription = "Repeat",
-                                tint = Color.White.copy(alpha = 0.6f),
+                                tint = tint,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -449,7 +460,109 @@ fun FullscreenPlayer(
                 }
             }
         }
-    } // NieroTheme
+
+        // ── Queue bottom sheet ─────────────────────────────────────────
+        if (showQueue) {
+            ModalBottomSheet(
+                onDismissRequest = { showQueue = false },
+                sheetState = queueSheetState,
+                dragHandle = { BottomSheetDefaults.DragHandle() },
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                QueueSheet(
+                    queue = state.queue,
+                    currentIndex = state.queueIndex,
+                    onTrackClick = { index ->
+                        viewModel.seekToQueueItem(index)
+                    },
+                    onDismiss = { showQueue = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueSheet(
+    queue: List<dev.neiro.app.data.api.models.SongDto>,
+    currentIndex: Int,
+    onTrackClick: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(currentIndex) {
+        if (queue.isNotEmpty()) {
+            listState.animateScrollToItem(currentIndex.coerceAtMost(queue.lastIndex))
+        }
+    }
+
+    Column(modifier = Modifier.navigationBarsPadding()) {
+        Text(
+            text = "Up Next",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+        )
+        HorizontalDivider()
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(queue) { index, song ->
+                val isCurrent = index == currentIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTrackClick(index); onDismiss() }
+                        .background(
+                            if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else Color.Transparent
+                        )
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = song.coverArtUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (!song.artist.isNullOrBlank()) {
+                            Text(
+                                text = song.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    if (isCurrent) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun formatMs(ms: Long): String {

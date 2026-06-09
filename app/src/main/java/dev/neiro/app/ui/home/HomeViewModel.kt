@@ -3,9 +3,11 @@ package dev.neiro.app.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.repository.LastFmRepository
 import dev.neiro.app.data.repository.MusicRepository
+import dev.neiro.app.player.PlayerController
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -39,7 +41,8 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val lastFmRepository: LastFmRepository,
-    private val preferences: NieroPreferences
+    private val preferences: NieroPreferences,
+    private val playerController: PlayerController
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -181,6 +184,7 @@ class HomeViewModel @Inject constructor(
                                         name = lfm.name, artistName = lfm.artist.name,
                                         playCount = lfm.playCountLong,
                                         subsonicId = best?.id,
+                                        albumId = best?.albumId,
                                         coverArtUrl = best?.coverArtUrl
                                     )
                                 }
@@ -200,6 +204,31 @@ class HomeViewModel @Inject constructor(
                 isLoading = false,
                 error = HomeError.ApiError(e.message ?: e.javaClass.simpleName)
             )
+        }
+    }
+
+    /** Play a single matched track (from Top Tracks list). Loads the full album queue via albumId if available. */
+    fun playTopTrack(track: LastFmMatchedTrack) {
+        val songId = track.subsonicId ?: return
+        viewModelScope.launch {
+            val albumId = track.albumId
+            if (albumId != null) {
+                val songs = runCatching { musicRepository.getAlbum(albumId).song }.getOrElse { emptyList() }
+                val index = songs.indexOfFirst { it.id == songId }.coerceAtLeast(0)
+                if (songs.isNotEmpty()) {
+                    playerController.playTrack(songs[index], songs, index)
+                    return@launch
+                }
+            }
+            // Fallback: build a minimal SongDto and play just this track
+            val song = SongDto(
+                id = songId,
+                title = track.name,
+                artist = track.artistName,
+                coverArtUrl = track.coverArtUrl,
+                duration = 0
+            )
+            playerController.playTrack(song, listOf(song), 0)
         }
     }
 }
