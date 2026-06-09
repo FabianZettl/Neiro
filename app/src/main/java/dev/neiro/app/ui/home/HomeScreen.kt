@@ -319,10 +319,18 @@ fun HomeScreen(
                             }
 
                             is SectionItems.LastFmTopTracks -> item(key = "lfm_tracks_${sectionContent.config.id}") {
-                                LastFmTopTracksList(
-                                    tracks = items.items,
-                                    onTrackClick = { track -> viewModel.playTopTrack(track) }
-                                )
+                                when (sectionContent.config.layout) {
+                                    SectionLayout.SHELF, SectionLayout.GRID -> LastFmTopTracksShelf(
+                                        tracks = items.items,
+                                        itemShape = sectionContent.config.itemShape,
+                                        itemSize = sectionContent.config.itemSize,
+                                        onTrackClick = { track -> viewModel.playTopTrack(track) }
+                                    )
+                                    SectionLayout.LIST -> LastFmTopTracksList(
+                                        tracks = items.items,
+                                        onTrackClick = { track -> viewModel.playTopTrack(track) }
+                                    )
+                                }
                             }
 
                             is SectionItems.Genres -> item(key = "genres_${sectionContent.config.id}") {
@@ -1014,6 +1022,63 @@ private fun LastFmAlbumShelfRow(
                 )
                 Text(
                     text = "${album.playCount} plays",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+// ── Last.fm Top Tracks shelf (horizontal scroll) ──────────────────────────────
+
+@Composable
+private fun LastFmTopTracksShelf(
+    tracks: List<LastFmMatchedTrack>,
+    itemShape: ItemShape = ItemShape.ROUNDED,
+    itemSize: ItemSize = ItemSize.MEDIUM,
+    onTrackClick: (LastFmMatchedTrack) -> Unit = {}
+) {
+    val cardSize: Dp = when (itemSize) {
+        ItemSize.SMALL  -> 100.dp
+        ItemSize.MEDIUM -> 140.dp
+        ItemSize.LARGE  -> 180.dp
+    }
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(tracks, key = { "${it.name}_${it.artistName}" }) { track ->
+            val isMatched = track.subsonicId != null
+            Column(
+                modifier = Modifier
+                    .width(cardSize)
+                    .then(if (isMatched) Modifier.clickable { onTrackClick(track) } else Modifier),
+                horizontalAlignment = Alignment.Start
+            ) {
+                AsyncImage(
+                    model = track.coverArtUrl,
+                    contentDescription = track.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(cardSize)
+                        .clip(itemShape.clipShape())
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = track.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isMatched) MaterialTheme.colorScheme.onBackground
+                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = track.artistName,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

@@ -45,6 +45,16 @@ class PlayerController @Inject constructor(
     // Prevents multiple simultaneous connection attempts
     @Volatile private var isConnecting = false
 
+    // Tracks the server-side time offset applied to the current stream URL.
+    // When seekTo(T) is called we rebuild the stream URL with &timeOffset=T/1000
+    // so the server starts sending audio from T. ExoPlayer then reports position
+    // starting from 0; we add this offset so the UI shows the correct absolute time.
+    @Volatile private var seekOffsetMs = 0L
+
+    // True while we're replacing the current MediaItem due to a seek.
+    // Prevents onMediaItemTransition from resetting position/offset on that event.
+    @Volatile private var seekInProgress = false
+
     init {
         scope.launch(Dispatchers.Main) {
             connectToService()
@@ -111,6 +121,12 @@ class PlayerController @Inject constructor(
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (seekInProgress) {
+                    // This transition was triggered by our own replaceMediaItem seek — skip reset.
+                    seekInProgress = false
+                    return
+                }
+                seekOffsetMs = 0L
                 val index = controller.currentMediaItemIndex
                 val song = currentQueue.getOrNull(index)
                 _playerState.value = _playerState.value.copy(
@@ -130,8 +146,12 @@ class PlayerController @Inject constructor(
                     else -> "UNKNOWN($playbackState)"
                 }
                 Log.d("NieroPlayer", "Playback state: $stateName")
-                val duration = controller.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-                _playerState.value = _playerState.value.copy(durationMs = duration)
+                // After a timeOffset seek, ExoPlayer reports the REMAINING duration,
+                // not the full track duration. Always prefer API metadata.
+                val apiDur = _playerState.value.currentSong?.duration?.let { it * 1000L }
+                    ?.takeIf { it > 0L }
+                val exoDur = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L }
+                _playerState.value = _playerState.value.copy(durationMs = apiDur ?: exoDur ?: 0L)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -149,11 +169,17 @@ class PlayerController @Inject constructor(
         while (true) {
             delay(500)
             _controller.value?.let { controller ->
-                val pos = controller.currentPosition.takeIf { it != C.TIME_UNSET } ?: 0L
-                // Prefer ExoPlayer duration; fall back to API metadata (duration field in seconds)
-                val exoDur = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L }
+                // Use ExoPlayer directly when available (same process — more accurate).
+                val rawPos = NieroPlayerHolder.player?.currentPosition?.takeIf { it != C.TIME_UNSET }
+                    ?: controller.currentPosition.takeIf { it != C.TIME_UNSET }
+                    ?: 0L
+                // Add server-side seek offset so position reflects absolute track time.
+                val pos = rawPos + seekOffsetMs
+                // Always prefer API duration; after a timeOffset seek ExoPlayer reports
+                // the remaining duration (totalDuration - offset), which is misleading.
                 val metaDur = _playerState.value.currentSong?.duration?.let { it * 1000L }?.takeIf { it > 0L }
-                val dur = exoDur ?: metaDur ?: _playerState.value.durationMs
+                val exoDur = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L }
+                val dur = metaDur ?: exoDur ?: _playerState.value.durationMs
                 _playerState.value = _playerState.value.copy(positionMs = pos, durationMs = dur)
             }
         }
@@ -213,6 +239,7 @@ class PlayerController @Inject constructor(
 
     fun seekToQueueItem(index: Int) {
         val controller = _controller.value ?: return
+        seekOffsetMs = 0L
         controller.seekTo(index, 0L)
     }
 
@@ -239,16 +266,31 @@ class PlayerController @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        // Call ExoPlayer directly — same process, no IPC round-trip.
-        // MediaController.seekTo() can silently drop seeks on live-transcoded HTTP streams
-        // because ExoPlayer marks them non-seekable until Content-Length is known.
-        val exo = NieroPlayerHolder.player
-        if (exo != null) {
-            exo.seekTo(positionMs)
-        } else {
-            _controller.value?.seekTo(positionMs)
-        }
+        // Seeking transcoded HTTP streams by byte range doesn't work because the server
+        // doesn't send Content-Length. Instead, rebuild the stream URL with the Subsonic
+        // `timeOffset` parameter so the server starts sending audio from the desired second.
+        // ExoPlayer then plays from position 0 of the new stream; we add seekOffsetMs to
+        // the reported position in startPositionUpdater so the UI shows the correct time.
+        seekOffsetMs = positionMs
         _playerState.value = _playerState.value.copy(positionMs = positionMs)
+
+        val exo = NieroPlayerHolder.player ?: run {
+            // No ExoPlayer available — nothing we can do
+            return
+        }
+        val song = _playerState.value.currentSong ?: return
+        val index = _playerState.value.queueIndex
+        val wasPlaying = _playerState.value.isPlaying
+
+        scope.launch(Dispatchers.Main) {
+            val prefs = preferences.prefsFlow.first()
+            val newItem = buildMediaItem(song, prefs, timeOffsetSecs = (positionMs / 1000).toInt())
+            seekInProgress = true
+            exo.replaceMediaItem(index, newItem)
+            // replaceMediaItem resets ExoPlayer's position to 0 of the new item — exactly
+            // what we want since the server now starts from timeOffset.
+            if (wasPlaying) exo.play()
+        }
     }
 
     /** Inserts a song immediately after the currently playing track. */
@@ -272,15 +314,16 @@ class PlayerController @Inject constructor(
         _playerState.value = _playerState.value.copy(queue = currentQueue)
     }
 
-    private fun buildMediaItem(song: SongDto, prefs: NieroPrefs): MediaItem {
+    private fun buildMediaItem(song: SongDto, prefs: NieroPrefs, timeOffsetSecs: Int = 0): MediaItem {
         val salt = SubsonicAuthInterceptor.generateSalt()
         val token = SubsonicAuthInterceptor.md5(prefs.password + salt)
         val base = prefs.serverUrl.trimEnd('/')
         val bitrateParam = if (prefs.streamingBitrate > 0) "&maxBitRate=${prefs.streamingBitrate}" else ""
+        val offsetParam = if (timeOffsetSecs > 0) "&timeOffset=$timeOffsetSecs" else ""
         val streamUrl =
-            "$base/rest/stream?id=${song.id}&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json$bitrateParam"
+            "$base/rest/stream?id=${song.id}&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json$bitrateParam$offsetParam"
 
-        Log.d("NieroPlayer", "Stream URL (masked): $base/rest/stream?id=${song.id}&u=${prefs.username}&t=***&s=***&v=1.16.1&c=neiro$bitrateParam")
+        Log.d("NieroPlayer", "Stream URL (masked): $base/rest/stream?id=${song.id}&u=${prefs.username}&t=***&s=***&v=1.16.1&c=neiro$bitrateParam${if (timeOffsetSecs > 0) "&timeOffset=$timeOffsetSecs" else ""}")
 
         val builder = MediaItem.Builder()
             .setUri(streamUrl)
