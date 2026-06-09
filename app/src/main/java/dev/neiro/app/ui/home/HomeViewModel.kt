@@ -113,14 +113,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // Sort types that have a meaningful Last.fm equivalent (play count / recency based).
-    // For these, we auto-prefer Last.fm when a session is configured, unless the user
-    // has explicitly forced DataSource.SUBSONIC.
-    private val lastFmStatSorts = setOf(
-        AlbumSortType.MOST_PLAYED,
-        AlbumSortType.RECENTLY_PLAYED
-    )
-
     private suspend fun loadSections(configs: List<HomeSectionConfig>) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         try {
@@ -129,15 +121,21 @@ class HomeViewModel @Inject constructor(
             coroutineScope {
                 val sections = enabledConfigs.map { config ->
                     async {
-                        // Determine effective data source:
-                        // – If the user explicitly chose SUBSONIC, always use Subsonic.
-                        // – Otherwise, if LastFM is configured AND the sort type has a
-                        //   LastFM equivalent, auto-use LastFM.
-                        val useLastFm = hasLastFm && config.dataSource != DataSource.SUBSONIC &&
-                            (config.dataSource == DataSource.LASTFM ||
-                             (config.contentType == SectionContentType.ALBUMS && config.sortType in lastFmStatSorts) ||
-                             (config.contentType == SectionContentType.ARTISTS) ||
-                             (config.contentType == SectionContentType.TRACKS))
+                        // Use LastFM when the session is configured AND the sort type
+                        // has a meaningful LastFM equivalent (play/scrobble stats).
+                        // Sort type IS the signal — no separate DataSource picker needed.
+                        val useLastFm = hasLastFm && when (config.contentType) {
+                            SectionContentType.ALBUMS ->
+                                config.sortType == AlbumSortType.MOST_PLAYED ||
+                                config.sortType == AlbumSortType.RECENTLY_PLAYED ||
+                                config.dataSource == DataSource.LASTFM
+                            SectionContentType.ARTISTS ->
+                                config.artistSortType == ArtistSortType.MOST_PLAYED ||
+                                config.artistSortType == ArtistSortType.RECENTLY_PLAYED ||
+                                config.dataSource == DataSource.LASTFM
+                            SectionContentType.TRACKS -> true
+                            else -> false
+                        }
 
                         val items: SectionItems = when (config.contentType) {
                             SectionContentType.ALBUMS -> {
@@ -183,6 +181,7 @@ class HomeViewModel @Inject constructor(
                                             ArtistSortType.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
                                             ArtistSortType.ALBUM_COUNT  -> list.sortedByDescending { it.albumCount }
                                             ArtistSortType.RANDOM       -> list.shuffled()
+                                            else -> list
                                         }
                                         list.take(config.size)
                                     }.getOrElse { emptyList() }

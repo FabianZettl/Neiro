@@ -53,6 +53,8 @@ enum class AlbumSortType(val displayName: String, val apiType: String) {
 enum class ArtistSortType(val displayName: String) {
     ALPHABETICAL("A–Z"),
     ALBUM_COUNT("Most Albums"),
+    MOST_PLAYED("Most Played"),
+    RECENTLY_PLAYED("Recently Played"),
     RANDOM("Random"),
 }
 

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.neiro.app.data.prefs.NieroPreferences
+import dev.neiro.app.data.repository.LastFmRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,17 +14,24 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ManageSectionsViewModel @Inject constructor(
-    private val preferences: NieroPreferences
+    private val preferences: NieroPreferences,
+    private val lastFmRepository: LastFmRepository
 ) : ViewModel() {
 
     private val _sections = MutableStateFlow(DEFAULT_HOME_SECTIONS)
     val sections: StateFlow<List<HomeSectionConfig>> = _sections.asStateFlow()
+
+    private val _hasLastFm = MutableStateFlow(false)
+    val hasLastFm: StateFlow<Boolean> = _hasLastFm.asStateFlow()
 
     init {
         viewModelScope.launch {
             preferences.homeSectionsJson.collect { json ->
                 _sections.value = json?.toHomeSectionConfigs() ?: DEFAULT_HOME_SECTIONS
             }
+        }
+        viewModelScope.launch {
+            _hasLastFm.value = lastFmRepository.isSessionConfigured()
         }
     }
 

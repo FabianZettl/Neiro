@@ -66,6 +66,7 @@ fun ManageSectionsScreen(
     viewModel: ManageSectionsViewModel = hiltViewModel()
 ) {
     val sections by viewModel.sections.collectAsStateWithLifecycle()
+    val hasLastFm by viewModel.hasLastFm.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -86,6 +87,7 @@ fun ManageSectionsScreen(
             itemsIndexed(sections, key = { _, s -> s.id }) { index, section ->
                 SectionCard(
                     config = section,
+                    hasLastFm = hasLastFm,
                     index = index,
                     total = sections.size,
                     onUpdate = { viewModel.update(section.id, it) },
@@ -119,6 +121,7 @@ fun ManageSectionsScreen(
 @Composable
 private fun SectionCard(
     config: HomeSectionConfig,
+    hasLastFm: Boolean,
     index: Int,
     total: Int,
     onUpdate: ((HomeSectionConfig) -> HomeSectionConfig) -> Unit,
@@ -280,174 +283,202 @@ private fun SectionCard(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Data Source picker (for ALBUMS, ARTISTS, TRACKS)
-                    if (config.contentType in listOf(SectionContentType.ALBUMS, SectionContentType.ARTISTS, SectionContentType.TRACKS)) {
-                        FilterLabel("Data Source")
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DataSource.entries.forEach { source ->
-                                FilterChip(
-                                    selected = config.dataSource == source,
-                                    onClick = { onUpdate { it.copy(dataSource = source) } },
-                                    label = { Text(source.displayName) },
-                                    colors = chipColors()
-                                )
-                            }
-                        }
-                    }
-
-                    // Album-only filters
-                    if (config.contentType == SectionContentType.ALBUMS && config.dataSource == DataSource.SUBSONIC) {
+                    // ── ALBUMS ────────────────────────────────────────────────
+                    if (config.contentType == SectionContentType.ALBUMS) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         Text(
-                            "FILTER & SORT",
+                            "SORT ORDER",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-
-                        // Sort order
-                        FilterLabel("Sort Order")
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             AlbumSortType.entries.forEach { sort ->
+                                val isLastFmSort = sort == AlbumSortType.MOST_PLAYED || sort == AlbumSortType.RECENTLY_PLAYED
                                 FilterChip(
                                     selected = config.sortType == sort,
                                     onClick = { onUpdate { it.copy(sortType = sort) } },
-                                    label = { Text(sort.displayName, style = MaterialTheme.typography.labelSmall) },
+                                    label = {
+                                        Text(
+                                            if (hasLastFm && isLastFmSort) "⬡ ${sort.displayName}"
+                                            else sort.displayName,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
                                     colors = chipColors()
                                 )
                             }
                         }
+                        if (hasLastFm) {
+                            Text(
+                                "⬡ = uses Last.fm data",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                        // Genre filter
-                        FilterLabel("Genre (exact match, leave empty for all)")
-                        OutlinedTextField(
-                            value = config.genre ?: "",
-                            onValueChange = { v -> onUpdate { it.copy(genre = v.takeIf { it.isNotBlank() }) } },
-                            label = { Text("Genre") },
-                            placeholder = { Text("e.g. Rock, Jazz, Classical") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
+                        // LastFM period picker when sort uses LastFM
+                        val albumUsesLastFm = hasLastFm && (
+                            config.sortType == AlbumSortType.MOST_PLAYED ||
+                            config.sortType == AlbumSortType.RECENTLY_PLAYED
                         )
-
-                        // Played in last X days
-                        FilterLabel("Played in Last")
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val dayOptions = listOf(null to "Any", 7 to "7 days", 14 to "14 days",
-                                30 to "30 days", 90 to "3 months", 180 to "6 months", 365 to "1 year")
-                            dayOptions.forEach { (days, label) ->
-                                FilterChip(
-                                    selected = config.playedInLastDays == days,
-                                    onClick = { onUpdate { it.copy(playedInLastDays = days) } },
-                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                                    colors = chipColors()
-                                )
+                        if (albumUsesLastFm) {
+                            FilterLabel("Last.fm Time Range")
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LastFmPeriod.entries.forEach { period ->
+                                    FilterChip(
+                                        selected = config.lastFmPeriod == period,
+                                        onClick = { onUpdate { it.copy(lastFmPeriod = period) } },
+                                        label = { Text(period.displayName) },
+                                        colors = chipColors()
+                                    )
+                                }
                             }
                         }
 
-                        // Min play count
-                        FilterLabel("Minimum Play Count")
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val countOptions = listOf(null to "Any", 1 to "1+", 5 to "5+",
-                                10 to "10+", 25 to "25+", 50 to "50+")
-                            countOptions.forEach { (count, label) ->
-                                FilterChip(
-                                    selected = config.minPlayCount == count,
-                                    onClick = { onUpdate { it.copy(minPlayCount = count) } },
-                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                                    colors = chipColors()
-                                )
-                            }
-                        }
-
-                        // Starred only
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Starred Only", style = MaterialTheme.typography.bodyMedium)
-                                Text("Show only starred/favorited albums",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(
-                                checked = config.starredOnly,
-                                onCheckedChange = { onUpdate { it.copy(starredOnly = !it.starredOnly) } }
-                            )
-                        }
-
-                        // Year range
-                        FilterLabel("Year Range")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Subsonic-only filters (genre, year, etc.)
+                        if (!albumUsesLastFm) {
+                            FilterLabel("Genre (leave empty for all)")
                             OutlinedTextField(
-                                value = config.yearFrom?.toString() ?: "",
-                                onValueChange = { v -> onUpdate { it.copy(yearFrom = v.toIntOrNull()) } },
-                                label = { Text("From") },
-                                placeholder = { Text("1970") },
+                                value = config.genre ?: "",
+                                onValueChange = { v -> onUpdate { it.copy(genre = v.takeIf { it.isNotBlank() }) } },
+                                label = { Text("Genre") },
+                                placeholder = { Text("e.g. Rock, Jazz, Classical") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp)
                             )
-                            OutlinedTextField(
-                                value = config.yearTo?.toString() ?: "",
-                                onValueChange = { v -> onUpdate { it.copy(yearTo = v.toIntOrNull()) } },
-                                label = { Text("To") },
-                                placeholder = { Text("2025") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            )
+                            FilterLabel("Played in Last")
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val dayOptions = listOf(null to "Any", 7 to "7 days", 14 to "14 days",
+                                    30 to "30 days", 90 to "3 months", 180 to "6 months", 365 to "1 year")
+                                dayOptions.forEach { (days, label) ->
+                                    FilterChip(
+                                        selected = config.playedInLastDays == days,
+                                        onClick = { onUpdate { it.copy(playedInLastDays = days) } },
+                                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                        colors = chipColors()
+                                    )
+                                }
+                            }
+                            FilterLabel("Minimum Play Count")
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val countOptions = listOf(null to "Any", 1 to "1+", 5 to "5+",
+                                    10 to "10+", 25 to "25+", 50 to "50+")
+                                countOptions.forEach { (count, label) ->
+                                    FilterChip(
+                                        selected = config.minPlayCount == count,
+                                        onClick = { onUpdate { it.copy(minPlayCount = count) } },
+                                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                        colors = chipColors()
+                                    )
+                                }
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Starred Only", style = MaterialTheme.typography.bodyMedium)
+                                    Text("Show only starred/favorited albums",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = config.starredOnly,
+                                    onCheckedChange = { onUpdate { it.copy(starredOnly = !it.starredOnly) } }
+                                )
+                            }
+                            FilterLabel("Year Range")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = config.yearFrom?.toString() ?: "",
+                                    onValueChange = { v -> onUpdate { it.copy(yearFrom = v.toIntOrNull()) } },
+                                    label = { Text("From") },
+                                    placeholder = { Text("1970") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = config.yearTo?.toString() ?: "",
+                                    onValueChange = { v -> onUpdate { it.copy(yearTo = v.toIntOrNull()) } },
+                                    label = { Text("To") },
+                                    placeholder = { Text("2025") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                            }
                         }
                     }
 
-                    // Artist-only filters
-                    if (config.contentType == SectionContentType.ARTISTS && config.dataSource == DataSource.SUBSONIC) {
+                    // ── ARTISTS ───────────────────────────────────────────────
+                    if (config.contentType == SectionContentType.ARTISTS) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         Text(
-                            "FILTER & SORT",
+                            "SORT ORDER",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-
-                        FilterLabel("Sort Order")
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ArtistSortType.entries.forEach { sort ->
+                                val isLastFmSort = sort == ArtistSortType.MOST_PLAYED || sort == ArtistSortType.RECENTLY_PLAYED
                                 FilterChip(
                                     selected = config.artistSortType == sort,
                                     onClick = { onUpdate { it.copy(artistSortType = sort) } },
-                                    label = { Text(sort.displayName) },
+                                    label = {
+                                        Text(
+                                            if (hasLastFm && isLastFmSort) "⬡ ${sort.displayName}"
+                                            else sort.displayName
+                                        )
+                                    },
                                     colors = chipColors()
                                 )
                             }
                         }
+                        if (hasLastFm) {
+                            Text(
+                                "⬡ = uses Last.fm data",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                        FilterLabel("Genre (filters artists by their albums)")
-                        OutlinedTextField(
-                            value = config.artistGenre ?: "",
-                            onValueChange = { v -> onUpdate { it.copy(artistGenre = v.takeIf { it.isNotBlank() }) } },
-                            label = { Text("Genre") },
-                            placeholder = { Text("e.g. Emo, Metal, Jazz") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
+                        val artistUsesLastFm = hasLastFm && (
+                            config.artistSortType == ArtistSortType.MOST_PLAYED ||
+                            config.artistSortType == ArtistSortType.RECENTLY_PLAYED
                         )
+                        if (artistUsesLastFm) {
+                            FilterLabel("Last.fm Time Range")
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LastFmPeriod.entries.forEach { period ->
+                                    FilterChip(
+                                        selected = config.lastFmPeriod == period,
+                                        onClick = { onUpdate { it.copy(lastFmPeriod = period) } },
+                                        label = { Text(period.displayName) },
+                                        colors = chipColors()
+                                    )
+                                }
+                            }
+                        } else {
+                            FilterLabel("Genre (filters artists by their albums)")
+                            OutlinedTextField(
+                                value = config.artistGenre ?: "",
+                                onValueChange = { v -> onUpdate { it.copy(artistGenre = v.takeIf { it.isNotBlank() }) } },
+                                label = { Text("Genre") },
+                                placeholder = { Text("e.g. Emo, Metal, Jazz") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                        }
                     }
 
-                    // Last.fm period picker
-                    if (config.dataSource == DataSource.LASTFM &&
-                        config.contentType in listOf(SectionContentType.ALBUMS, SectionContentType.ARTISTS, SectionContentType.TRACKS)) {
+                    // ── TRACKS ────────────────────────────────────────────────
+                    if (config.contentType == SectionContentType.TRACKS) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                        Text(
-                            "LAST.FM PERIOD",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        FilterLabel("Time Range")
+                        FilterLabel("Last.fm Time Range")
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             LastFmPeriod.entries.forEach { period ->
                                 FilterChip(
@@ -500,10 +531,12 @@ private fun chipColors() = FilterChipDefaults.filterChipColors(
 private fun buildSummary(config: HomeSectionConfig): String {
     val parts = mutableListOf<String>()
     parts += config.contentType.displayName
+    val albumLastFm = config.sortType == AlbumSortType.MOST_PLAYED || config.sortType == AlbumSortType.RECENTLY_PLAYED
+    val artistLastFm = config.artistSortType == ArtistSortType.MOST_PLAYED || config.artistSortType == ArtistSortType.RECENTLY_PLAYED
     when (config.contentType) {
         SectionContentType.ALBUMS -> {
-            if (config.dataSource == DataSource.LASTFM) {
-                parts += "Last.fm · ${config.lastFmPeriod.displayName}"
+            if (albumLastFm) {
+                parts += "Last.fm · ${config.sortType.displayName} · ${config.lastFmPeriod.displayName}"
             } else {
                 parts += config.sortType.displayName
                 if (config.genre != null) parts += "Genre: ${config.genre}"
@@ -516,8 +549,8 @@ private fun buildSummary(config: HomeSectionConfig): String {
             }
         }
         SectionContentType.ARTISTS -> {
-            if (config.dataSource == DataSource.LASTFM) {
-                parts += "Last.fm · ${config.lastFmPeriod.displayName}"
+            if (artistLastFm) {
+                parts += "Last.fm · ${config.artistSortType.displayName} · ${config.lastFmPeriod.displayName}"
             } else {
                 parts += config.artistSortType.displayName
                 if (config.artistGenre != null) parts += "Genre: ${config.artistGenre}"
