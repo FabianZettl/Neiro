@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
@@ -66,18 +68,23 @@ import dev.neiro.app.ui.player.FullscreenPlayer
 import dev.neiro.app.ui.player.MiniPlayer
 import dev.neiro.app.ui.playlists.PlaylistDetailScreen
 import dev.neiro.app.ui.playlists.PlaylistsListScreen
+import dev.neiro.app.ui.podcasts.PodcastDetailScreen
+import dev.neiro.app.ui.podcasts.PodcastsScreen
+import dev.neiro.app.ui.radio.RadioScreen
 import dev.neiro.app.ui.search.SearchScreen
 import dev.neiro.app.ui.settings.SettingsScreen
 import dev.neiro.app.ui.onboarding.OnboardingScreen
 import dev.neiro.app.ui.startup.StartupViewModel
 import dev.neiro.app.ui.starred.StarredScreen
+import dev.neiro.app.ui.theme.LocalNeiroPalette
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 
 private val noMiniPlayerRoutes = setOf("fullscreen_player", "onboarding")
 private val noDrawerRoutes = setOf(
     "fullscreen_player", "manage_sections", "onboarding",
-    "album/{albumId}", "artist/{artistId}", "playlist/{playlistId}"
+    "album/{albumId}", "artist/{artistId}", "playlist/{playlistId}",
+    "podcast_detail/{subscriptionId}"
 )
 
 @Composable
@@ -173,6 +180,12 @@ fun NieroNavGraph(
                     arguments = listOf(navArgument("playlistId") { type = NavType.StringType })
                 ) { PlaylistDetailScreen(navController = navController) }
                 composable("starred") { StarredScreen(navController = navController) }
+                composable("radio") { RadioScreen(navController = navController) }
+                composable("podcasts") { PodcastsScreen(navController = navController) }
+                composable(
+                    route = "podcast_detail/{subscriptionId}",
+                    arguments = listOf(navArgument("subscriptionId") { type = NavType.StringType })
+                ) { PodcastDetailScreen(navController = navController) }
                 composable("fullscreen_player") { FullscreenPlayer(navController = navController) }
                 composable("manage_sections") { ManageSectionsScreen(navController = navController) }
             }
@@ -195,11 +208,15 @@ private fun NieroDrawerSheet(
     currentRoute: String?,
     onNavigate: (String) -> Unit
 ) {
+    // Use palette surface/text directly so the drawer stays dark in both
+    // dark and light theme modes (NieroTheme's lightColorScheme hardcodes
+    // surface = Color.White, which would make the drawer all-white).
+    val palette = LocalNeiroPalette.current
     Box(
         modifier = Modifier
             .fillMaxHeight()
             .width(300.dp)
-            .background(MaterialTheme.colorScheme.surface)
+            .background(palette.surface)
             .statusBarsPadding()
     ) {
         Column(
@@ -212,31 +229,33 @@ private fun NieroDrawerSheet(
                 text = "音色  Neiro",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = palette.textPrimary,
                 modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 20.dp, end = 20.dp)
             )
 
             // ── Main navigation ──────────────────────────────────────────
-            DrawerItem(Icons.Default.Search,      "Search",   "search",   currentRoute, onNavigate)
-            DrawerItem(Icons.Default.Home,         "Home",     "home",     currentRoute, onNavigate)
+            DrawerItem(Icons.Default.Search,      "Search",   "search",   currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Home,         "Home",     "home",     currentRoute, onNavigate, palette)
 
             Spacer(Modifier.height(8.dp))
-            DrawerSectionHeader("LIBRARY")
+            DrawerSectionHeader("LIBRARY", palette)
 
-            DrawerItem(Icons.Default.Audiotrack,   "Recently Added",  "albums_list?albumType=newest",               currentRoute, onNavigate)
-            DrawerItem(Icons.Default.Person,       "Artists",         "artists_list",                               currentRoute, onNavigate)
-            DrawerItem(Icons.Default.Album,        "Albums",          "albums_list?albumType=alphabeticalByName",   currentRoute, onNavigate)
-            DrawerItem(Icons.Default.PlaylistPlay, "Playlists",       "playlists_list", currentRoute, onNavigate)
-            DrawerItem(Icons.Default.Favorite,     "Starred",         "starred",        currentRoute, onNavigate)
+            DrawerItem(Icons.Default.Audiotrack,   "Recently Added",  "albums_list?albumType=newest",               currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Person,       "Artists",         "artists_list",                               currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Album,        "Albums",          "albums_list?albumType=alphabeticalByName",   currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.PlaylistPlay, "Playlists",       "playlists_list", currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Favorite,     "Starred",         "starred",        currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Radio,        "Internet Radio",  "radio",          currentRoute, onNavigate, palette)
+            DrawerItem(Icons.Default.Podcasts,     "Podcasts",        "podcasts",       currentRoute, onNavigate, palette)
 
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                color = palette.textSecondary.copy(alpha = 0.25f)
             )
             Spacer(Modifier.height(8.dp))
 
-            DrawerItem(Icons.Default.Settings, "Settings", "settings", currentRoute, onNavigate)
+            DrawerItem(Icons.Default.Settings, "Settings", "settings", currentRoute, onNavigate, palette)
 
             Spacer(Modifier.height(24.dp))
         }
@@ -244,13 +263,13 @@ private fun NieroDrawerSheet(
 }
 
 @Composable
-private fun DrawerSectionHeader(label: String) {
+private fun DrawerSectionHeader(label: String, palette: dev.neiro.app.ui.theme.NeiroPalette) {
     Text(
         text = label,
         style = MaterialTheme.typography.labelSmall,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        color = palette.textSecondary.copy(alpha = 0.7f),
         modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp)
     )
 }
@@ -261,7 +280,8 @@ private fun DrawerItem(
     label: String,
     route: String,
     currentRoute: String?,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    palette: dev.neiro.app.ui.theme.NeiroPalette
 ) {
     val selected = currentRoute == route
     val interactionSource = remember { MutableInteractionSource() }
@@ -273,7 +293,7 @@ private fun DrawerItem(
             .clip(RoundedCornerShape(10.dp))
             .then(
                 if (selected)
-                    Modifier.background(MaterialTheme.colorScheme.primary)
+                    Modifier.background(palette.accent)
                 else
                     Modifier
             )
@@ -284,8 +304,7 @@ private fun DrawerItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (selected) MaterialTheme.colorScheme.onPrimary
-                   else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (selected) palette.textPrimary else palette.textSecondary,
             modifier = Modifier.size(20.dp)
         )
         Spacer(Modifier.width(14.dp))
@@ -293,8 +312,7 @@ private fun DrawerItem(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onBackground
+            color = if (selected) palette.textPrimary else palette.textPrimary
         )
     }
 }

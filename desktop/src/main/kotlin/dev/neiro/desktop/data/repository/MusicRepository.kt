@@ -1,0 +1,246 @@
+package dev.neiro.desktop.data.repository
+
+import dev.neiro.desktop.data.api.SubsonicApi
+import dev.neiro.desktop.data.api.SubsonicAuthInterceptor
+import dev.neiro.desktop.data.api.models.AlbumDto
+import dev.neiro.desktop.data.api.models.ArtistDto
+import dev.neiro.desktop.data.api.models.ArtistInfoDto
+import dev.neiro.desktop.data.api.models.ArtistWithAlbumsDto
+import dev.neiro.desktop.data.api.models.LibraryStats
+import dev.neiro.desktop.data.api.models.PlaylistDto
+import dev.neiro.desktop.data.api.models.SearchResult3Dto
+import dev.neiro.desktop.data.api.models.SongDto
+import dev.neiro.desktop.data.prefs.DesktopPreferences
+import dev.neiro.desktop.data.prefs.NieroPrefs
+import dev.neiro.desktop.ui.home.AlbumSortType
+import dev.neiro.desktop.ui.home.GenreItem
+import dev.neiro.desktop.ui.home.HomeSectionConfig
+import kotlinx.coroutines.flow.first
+import java.time.Instant
+
+class MusicRepository(
+    private val api: SubsonicApi,
+    private val preferences: DesktopPreferences
+) {
+
+    suspend fun getAlbumsByFilter(config: HomeSectionConfig): List<AlbumDto> {
+        val prefs = preferences.prefsFlow.first()
+
+        val hasClientFilters = config.genre != null
+            || config.playedInLastDays != null
+            || config.minPlayCount != null
+            || (config.starredOnly && config.sortType != AlbumSortType.STARRED)
+            || config.yearFrom != null
+            || config.yearTo != null
+        val fetchSize = if (hasClientFilters) minOf(config.size * 10, 500) else config.size
+
+        val result = api.getAlbumList2(
+            type = config.sortType.apiType,
+            size = fetchSize
+        )
+
+        var albums = result.response.albumList2?.album.orEmpty().map { album ->
+            album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+
+        if (config.starredOnly && config.sortType != AlbumSortType.STARRED) {
+            albums = albums.filter { it.starred != null }
+        }
+        if (config.genre != null) {
+            albums = albums.filter { album ->
+                album.allGenres().any { it.contains(config.genre, ignoreCase = true) }
+            }
+        }
+        if (config.minPlayCount != null) {
+            albums = albums.filter { (it.playCount ?: 0) >= config.minPlayCount }
+        }
+        if (config.playedInLastDays != null) {
+            val cutoffMs = System.currentTimeMillis() -
+                config.playedInLastDays.toLong() * 24 * 60 * 60 * 1000L
+            albums = albums.filter { album ->
+                val played = album.played ?: return@filter false
+                runCatching {
+                    Instant.parse(played).toEpochMilli() >= cutoffMs
+                }.getOrDefault(false)
+            }
+        }
+        if (config.yearFrom != null) {
+            albums = albums.filter { it.year != null && it.year >= config.yearFrom }
+        }
+        if (config.yearTo != null) {
+            albums = albums.filter { it.year != null && it.year <= config.yearTo }
+        }
+
+        return albums.take(config.size)
+    }
+
+    suspend fun getAlbumsByType(type: String, size: Int = 20): List<AlbumDto> {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.getAlbumList2(type = type, size = size)
+        return result.response.albumList2?.album.orEmpty().map { album ->
+            album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }
+
+    suspend fun getRecentAlbums(size: Int = 20): List<AlbumDto> {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.getAlbumList2(type = "recent", size = size)
+        return result.response.albumList2?.album.orEmpty().map { album ->
+            album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }
+
+    suspend fun getAlphabeticalAlbums(size: Int = 20): List<AlbumDto> {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.getAlbumList2(type = "alphabeticalByName", size = size)
+        return result.response.albumList2?.album.orEmpty().map { album ->
+            album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }
+
+    suspend fun getLibraryStats(): LibraryStats {
+        val response = api.getArtists().response
+        val artists = response.artists.index.flatMap { it.artist }
+        val albumCount = artists.sumOf { it.albumCount }
+        return LibraryStats(artistCount = artists.size, albumCount = albumCount)
+    }
+
+    suspend fun getNewestAlbums(size: Int = 20): List<AlbumDto> {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.getAlbumList2(type = "newest", size = size)
+        return result.response.albumList2?.album.orEmpty().map { album ->
+            album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }
+
+    suspend fun getArtist(id: String): ArtistWithAlbumsDto {
+        val prefs = preferences.prefsFlow.first()
+        val artist = api.getArtist(id).response.artist
+        return artist.copy(
+            album = artist.album.orEmpty().map { album ->
+                album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
+            }
+        )
+    }
+
+    suspend fun getArtistInfo(artistId: String): ArtistInfoDto {
+        return runCatching { api.getArtistInfo2(artistId).response.artistInfo2 }
+            .getOrElse { ArtistInfoDto() }
+    }
+
+    suspend fun getArtistIdsByGenre(genre: String): Set<String> {
+        val result = runCatching {
+            api.getAlbumList2(type = "alphabeticalByName", size = 500)
+        }.getOrNull() ?: return emptySet()
+        return result.response.albumList2?.album.orEmpty()
+            .filter { album -> album.allGenres().any { it.contains(genre, ignoreCase = true) } }
+            .mapNotNull { it.artistId }
+            .toSet()
+    }
+
+    suspend fun getAllArtists(): List<ArtistDto> {
+        val prefs = preferences.prefsFlow.first()
+        return api.getArtists().response.artists.index.flatMap { it.artist }.map { entry ->
+            ArtistDto(
+                id = entry.id,
+                name = entry.name,
+                albumCount = entry.albumCount,
+                coverArt = entry.coverArt,
+                coverArtUrl = entry.coverArt?.let { buildCoverArtUrl(prefs, it, size = 200) }
+            )
+        }
+    }
+
+    suspend fun getAlbum(id: String): AlbumDto {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.getAlbum(id)
+        val album = result.response.album
+        val songs = album.song.map { song ->
+            song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+        return album.copy(
+            coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) },
+            song = songs
+        )
+    }
+
+    suspend fun search(query: String): SearchResult3Dto {
+        val prefs = preferences.prefsFlow.first()
+        val result = api.search3(query)
+        return result.response.searchResult3.let { sr ->
+            sr.copy(
+                album = sr.album.map { a ->
+                    a.copy(coverArtUrl = a.coverArt?.let { buildCoverArtUrl(prefs, it) })
+                },
+                song = sr.song.map { s ->
+                    s.copy(coverArtUrl = s.coverArt?.let { buildCoverArtUrl(prefs, it) })
+                }
+            )
+        }
+    }
+
+    suspend fun getGenres(): List<GenreItem> = runCatching {
+        api.getGenres().response?.genres?.genres.orEmpty()
+            .sortedByDescending { it.albumCount }
+            .map { GenreItem(it.value, it.songCount, it.albumCount) }
+    }.getOrElse { emptyList() }
+
+    suspend fun searchSongs(query: String, artistQuery: String = ""): List<SongDto> = runCatching {
+        val q = if (artistQuery.isNotBlank()) "$query $artistQuery" else query
+        api.search3(q, songCount = 5, albumCount = 0, artistCount = 0)
+            .response.searchResult3.song
+    }.getOrElse { emptyList() }
+
+    suspend fun getSimilarSongs(songId: String, count: Int = 20): List<SongDto> = runCatching {
+        val prefs = preferences.prefsFlow.first()
+        api.getSimilarSongs2(songId, count).response.similarSongs2.songs.map { song ->
+            song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) })
+        }
+    }.getOrElse { emptyList() }
+
+    suspend fun starAlbum(albumId: String) = runCatching { api.star(albumId = albumId) }
+    suspend fun unstarAlbum(albumId: String) = runCatching { api.unstar(albumId = albumId) }
+
+    suspend fun getPlaylists(): List<PlaylistDto> {
+        return api.getPlaylists().response.playlists.playlist
+    }
+
+    suspend fun getPlaylist(id: String): PlaylistDto {
+        val prefs = preferences.prefsFlow.first()
+        val playlist = api.getPlaylist(id).response.playlist
+        return playlist.copy(
+            entry = playlist.entry.map { song ->
+                song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) })
+            }
+        )
+    }
+
+    suspend fun pingServer(): Pair<Boolean, String> {
+        return try {
+            val response = api.ping().response
+            if (response.status == "ok") {
+                true to response.version
+            } else {
+                false to (response.error?.message ?: "Unknown error")
+            }
+        } catch (e: Exception) {
+            false to (e.message ?: "Connection failed")
+        }
+    }
+
+    fun buildStreamUrl(songId: String, prefs: NieroPrefs, timeOffsetSecs: Int = 0): String {
+        val salt = SubsonicAuthInterceptor.generateSalt()
+        val token = SubsonicAuthInterceptor.md5(prefs.password + salt)
+        val base = prefs.serverUrl.trimEnd('/')
+        val bitrateParam = if (prefs.streamingBitrate > 0) "&maxBitRate=${prefs.streamingBitrate}" else ""
+        val offsetParam = if (timeOffsetSecs > 0) "&timeOffset=$timeOffsetSecs" else ""
+        return "$base/rest/stream?id=$songId&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json$bitrateParam$offsetParam"
+    }
+
+    fun buildCoverArtUrl(prefs: NieroPrefs, id: String, size: Int = 300): String {
+        val salt = SubsonicAuthInterceptor.generateSalt()
+        val token = SubsonicAuthInterceptor.md5(prefs.password + salt)
+        val base = prefs.serverUrl.trimEnd('/')
+        return "$base/rest/getCoverArt?id=$id&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json&size=$size"
+    }
+}

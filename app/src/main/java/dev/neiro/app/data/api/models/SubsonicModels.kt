@@ -52,7 +52,9 @@ data class SongDto(
     val year: Int? = null,
     val bitRate: Int? = null,
     val size: Long? = null,
-    val discNumber: Int? = null
+    val discNumber: Int? = null,
+    val contentType: String? = null,
+    val suffix: String? = null
 )
 
 data class ArtistDto(
@@ -295,4 +297,63 @@ data class SimilarSongsResponseBody(
 
 data class SimilarSongsApiResponse(
     @SerializedName("subsonic-response") val response: SimilarSongsResponseBody
+)
+
+// ── getLyricsBySongId ────────────────────────────────────────────────────────
+
+data class LyricsLine(
+    val start: Long? = null,   // milliseconds, null if unsynced
+    val value: String = ""
+)
+
+data class StructuredLyrics(
+    val displayArtist: String? = null,
+    val displayTitle: String? = null,
+    val lang: String? = null,
+    val offset: Long = 0,
+    val synced: Boolean = false,
+    val line: List<LyricsLine> = emptyList()
+)
+
+data class LyricsList(
+    val structuredLyrics: List<StructuredLyrics> = emptyList()
+)
+
+data class LyricsResponse(
+    @SerializedName("lyricsList") val lyricsList: LyricsList? = null
+)
+
+data class LyricsResponseBody(
+    val status: String = "",
+    val lyricsList: LyricsList? = null,
+    val error: SubsonicError? = null
+)
+
+data class LyricsApiResponse(
+    @SerializedName("subsonic-response") val response: LyricsResponseBody
+)
+
+// ── getInternetRadioStations ─────────────────────────────────────────────────
+
+data class InternetRadioStationDto(
+    val id: String = "",
+    val name: String = "",
+    val streamUrl: String = "",
+    val homePageUrl: String? = null
+)
+
+data class InternetRadioStationsContainer(
+    @SerializedName("internetRadioStation")
+    val stations: List<InternetRadioStationDto> = emptyList()
+)
+
+data class InternetRadioStationsResponseBody(
+    val status: String = "",
+    val internetRadioStations: InternetRadioStationsContainer? = null,
+    val error: SubsonicError? = null
+)
+
+data class InternetRadioStationsApiResponse(
+    @SerializedName("subsonic-response")
+    val response: InternetRadioStationsResponseBody
 )

@@ -7,6 +7,7 @@ import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.repository.LastFmRepository
 import dev.neiro.app.data.repository.MusicRepository
+import dev.neiro.app.data.repository.PodcastRepository
 import dev.neiro.app.player.PlayerController
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -41,6 +42,7 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val lastFmRepository: LastFmRepository,
+    private val podcastRepository: PodcastRepository,
     private val preferences: NieroPreferences,
     private val playerController: PlayerController
 ) : ViewModel() {
@@ -69,6 +71,20 @@ class HomeViewModel @Inject constructor(
                 val configs = sectionsJson?.toHomeSectionConfigs() ?: DEFAULT_HOME_SECTIONS
                 loadSections(configs)
             }
+        }
+        // Auto-refresh "recently played" sections when a new album starts playing
+        viewModelScope.launch {
+            playerController.playerState
+                .map { it.currentSong?.albumId }
+                .distinctUntilChanged()
+                .collect { albumId ->
+                    if (albumId != null) {
+                        viewModelScope.launch {
+                            delay(4000) // give the server time to register the play
+                            _refreshTrigger.value++
+                        }
+                    }
+                }
         }
     }
 
@@ -127,13 +143,12 @@ class HomeViewModel @Inject constructor(
                         val useLastFm = hasLastFm && when (config.contentType) {
                             SectionContentType.ALBUMS ->
                                 config.sortType == AlbumSortType.MOST_PLAYED ||
-                                config.sortType == AlbumSortType.RECENTLY_PLAYED ||
                                 config.dataSource == DataSource.LASTFM
                             SectionContentType.ARTISTS ->
                                 config.artistSortType == ArtistSortType.MOST_PLAYED ||
-                                config.artistSortType == ArtistSortType.RECENTLY_PLAYED ||
                                 config.dataSource == DataSource.LASTFM
                             SectionContentType.TRACKS -> true
+                            SectionContentType.LOVED_TRACKS -> true
                             else -> false
                         }
 
@@ -141,18 +156,19 @@ class HomeViewModel @Inject constructor(
                             SectionContentType.ALBUMS -> {
                                 if (useLastFm) {
                                     val lfmAlbums = lastFmRepository
-                                        .getTopAlbums(config.lastFmPeriod.apiValue, config.size)
+                                        .getTopAlbums(config.lastFmPeriod.apiValue, config.size * 3)
                                         ?.topAlbums?.albums.orEmpty()
                                     val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
-                                    val matched = lfmAlbums.map { lfm ->
+                                    val matched = lfmAlbums.mapNotNull { lfm ->
                                         val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
+                                            ?: return@mapNotNull null
                                         LastFmMatchedAlbum(
                                             name = lfm.name, artistName = lfm.artist.name,
                                             playCount = lfm.playCountInt,
-                                            subsonicId = sub?.id,
-                                            coverArtUrl = sub?.coverArtUrl ?: lfm.imageUrl
+                                            subsonicId = sub.id,
+                                            coverArtUrl = sub.coverArtUrl ?: lfm.imageUrl
                                         )
-                                    }
+                                    }.take(config.size)
                                     SectionItems.LastFmTopAlbums(matched)
                                 } else {
                                     SectionItems.Albums(runCatching { musicRepository.getAlbumsByFilter(config) }.getOrElse { emptyList() })
@@ -161,14 +177,15 @@ class HomeViewModel @Inject constructor(
                             SectionContentType.ARTISTS -> {
                                 if (useLastFm) {
                                     val lfmArtists = lastFmRepository
-                                        .getTopArtists(config.lastFmPeriod.apiValue, config.size)
+                                        .getTopArtists(config.lastFmPeriod.apiValue, config.size * 3)
                                         ?.topArtists?.artists.orEmpty()
                                     val subsonicArtists = runCatching { musicRepository.getAllArtists() }.getOrElse { emptyList() }
                                     val artistMap = subsonicArtists.associateBy { it.name.lowercase() }
-                                    val matched = lfmArtists.map { lfm ->
+                                    val matched = lfmArtists.mapNotNull { lfm ->
                                         val sub = artistMap[lfm.name.lowercase()]
-                                        LastFmMatchedArtist(name = lfm.name, playCount = lfm.playCountInt, subsonicId = sub?.id, coverArtUrl = sub?.coverArtUrl)
-                                    }
+                                            ?: return@mapNotNull null
+                                        LastFmMatchedArtist(name = lfm.name, playCount = lfm.playCountInt, subsonicId = sub.id, coverArtUrl = sub.coverArtUrl)
+                                    }.take(config.size)
                                     SectionItems.LastFmTopArtists(matched)
                                 } else {
                                     val artists = runCatching {
@@ -194,26 +211,49 @@ class HomeViewModel @Inject constructor(
                             SectionContentType.TRACKS -> {
                                 if (useLastFm) {
                                     val lfmTracks = lastFmRepository
-                                        .getTopTracks(config.lastFmPeriod.apiValue, config.size)
+                                        .getTopTracks(config.lastFmPeriod.apiValue, config.size * 3)
                                         ?.topTracks?.tracks.orEmpty()
-                                    val matched = lfmTracks.map { lfm ->
+                                    val matched = lfmTracks.mapNotNull { lfm ->
+                                        val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
+                                        val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
+                                            ?: return@mapNotNull null
+                                        LastFmMatchedTrack(
+                                            name = lfm.name, artistName = lfm.artist.name,
+                                            playCount = lfm.playCountLong,
+                                            subsonicId = best.id,
+                                            albumId = best.albumId,
+                                            coverArtUrl = best.coverArtUrl
+                                        )
+                                    }.take(config.size)
+                                    SectionItems.LastFmTopTracks(matched)
+                                } else {
+                                    SectionItems.LastFmTopTracks(emptyList())
+                                }
+                            }
+                            SectionContentType.LOVED_TRACKS -> {
+                                if (hasLastFm) {
+                                    val lovedTracks = lastFmRepository.getLovedTracksFull(200)
+                                    val matched = lovedTracks.map { lfm ->
                                         val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
                                         val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
                                         LastFmMatchedTrack(
                                             name = lfm.name, artistName = lfm.artist.name,
-                                            playCount = lfm.playCountLong,
+                                            playCount = 0L,
                                             subsonicId = best?.id,
                                             albumId = best?.albumId,
-                                            coverArtUrl = best?.coverArtUrl
+                                            coverArtUrl = best?.coverArtUrl ?: lfm.imageUrl
                                         )
                                     }
-                                    SectionItems.LastFmTopTracks(matched)
+                                    SectionItems.LastFmTopTracks(matched.filter { it.subsonicId != null })
                                 } else {
                                     SectionItems.LastFmTopTracks(emptyList())
                                 }
                             }
                             SectionContentType.GENRES -> {
                                 SectionItems.Genres(runCatching { musicRepository.getGenres() }.getOrElse { emptyList() })
+                            }
+                            SectionContentType.PODCASTS -> {
+                                SectionItems.Podcasts(runCatching { podcastRepository.getLatestEpisodes(config.size) }.getOrElse { emptyList() })
                             }
                         }
                         SectionContent(config, items)
@@ -251,6 +291,12 @@ class HomeViewModel @Inject constructor(
                 duration = 0
             )
             playerController.playTrack(song, listOf(song), 0)
+        }
+    }
+
+    fun playPodcastEpisode(item: dev.neiro.app.data.api.models.PodcastEpisodeWithPodcast) {
+        viewModelScope.launch {
+            playerController.playPodcastEpisode(item.episode, item.subscription)
         }
     }
 }

@@ -45,12 +45,20 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import dev.neiro.app.ui.theme.DefaultNeiroPalette
+import dev.neiro.app.ui.theme.NieroTheme
+import dev.neiro.app.ui.theme.ThemeMode
+import dev.neiro.app.ui.theme.ThemeViewModel
+import dev.neiro.app.ui.theme.extractPalette
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -62,20 +70,42 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import dev.neiro.app.data.api.models.PlaylistDto
 import dev.neiro.app.data.api.models.SongDto
+import dev.neiro.app.ui.components.AddToPlaylistDialog
 import dev.neiro.app.ui.player.PlayerViewModel
+import dev.neiro.app.ui.playlists.PlaylistActionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AlbumScreen(
     navController: NavController,
     viewModel: AlbumViewModel = hiltViewModel(),
-    playerViewModel: PlayerViewModel = hiltViewModel()
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+    themeViewModel: ThemeViewModel = hiltViewModel(),
+    playlistActionViewModel: PlaylistActionViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val lastFm = state.lastFmInfo
     val lovedKeys = state.lovedTrackKeys
+    val playlists by playlistActionViewModel.playlists.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
+    val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle()
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = when (themeMode) {
+        ThemeMode.DARK   -> true
+        ThemeMode.LIGHT  -> false
+        ThemeMode.SYSTEM -> systemDark
+    }
+    var albumPalette by remember { mutableStateOf(DefaultNeiroPalette) }
+    LaunchedEffect(state.album?.coverArtUrl, darkTheme) {
+        state.album?.coverArtUrl?.let { url ->
+            albumPalette = extractPalette(context, url, darkTheme)
+        }
+    }
+
+    NieroTheme(palette = albumPalette, darkTheme = darkTheme) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -160,7 +190,10 @@ fun AlbumScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable {
+                                        if (!album.artistId.isNullOrBlank()) navController.navigate("artist/${album.artistId}")
+                                    }
                                 )
                                 album.year?.let {
                                     Text(
@@ -257,7 +290,14 @@ fun AlbumScreen(
                             isLoved = isLoved,
                             onClick = { viewModel.playTrackAtIndex(index) },
                             onPlayNext = { playerViewModel.playNext(song) },
-                            onAddToQueue = { playerViewModel.addToQueue(song) }
+                            onAddToQueue = { playerViewModel.addToQueue(song) },
+                            playlists = playlists,
+                            onAddToPlaylist = { playlistId ->
+                                playlistActionViewModel.addToPlaylist(playlistId, listOf(song.id))
+                            },
+                            onCreateAndAddToPlaylist = { name ->
+                                playlistActionViewModel.createAndAddToPlaylist(name, listOf(song.id))
+                            }
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 52.dp, end = 16.dp),
@@ -272,6 +312,7 @@ fun AlbumScreen(
             }
         }
     }
+    } // NieroTheme
 }
 
 @Composable
@@ -281,9 +322,13 @@ private fun TrackRow(
     isLoved: Boolean = false,
     onClick: () -> Unit,
     onPlayNext: () -> Unit = {},
-    onAddToQueue: () -> Unit = {}
+    onAddToQueue: () -> Unit = {},
+    playlists: List<PlaylistDto> = emptyList(),
+    onAddToPlaylist: (playlistId: String) -> Unit = {},
+    onCreateAndAddToPlaylist: (name: String) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -366,8 +411,21 @@ private fun TrackRow(
                     text = { Text("Add to Queue") },
                     onClick = { menuExpanded = false; onAddToQueue() }
                 )
+                DropdownMenuItem(
+                    text = { Text("Add to Playlist") },
+                    onClick = { menuExpanded = false; showPlaylistDialog = true }
+                )
             }
         }
+    }
+
+    if (showPlaylistDialog) {
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { showPlaylistDialog = false },
+            onAddToPlaylist = onAddToPlaylist,
+            onCreateNewPlaylist = onCreateAndAddToPlaylist
+        )
     }
 }
 

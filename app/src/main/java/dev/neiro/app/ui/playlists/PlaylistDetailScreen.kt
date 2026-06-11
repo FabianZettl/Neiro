@@ -188,7 +188,8 @@ fun PlaylistDetailScreen(
                                 position = index + 1,
                                 onClick = { viewModel.playAll(index) },
                                 onPlayNext = { playerViewModel.playNext(song) },
-                                onAddToQueue = { playerViewModel.addToQueue(song) }
+                                onAddToQueue = { playerViewModel.addToQueue(song) },
+                                onRemove = { viewModel.removeSong(index) }
                             )
                             if (index < playlist.entry.lastIndex) {
                                 HorizontalDivider(
@@ -212,7 +213,8 @@ private fun PlaylistTrackRow(
     position: Int,
     onClick: () -> Unit,
     onPlayNext: () -> Unit,
-    onAddToQueue: () -> Unit
+    onAddToQueue: () -> Unit,
+    onRemove: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -280,6 +282,10 @@ private fun PlaylistTrackRow(
                 DropdownMenuItem(
                     text = { Text("Add to Queue") },
                     onClick = { menuExpanded = false; onAddToQueue() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Remove from Playlist") },
+                    onClick = { menuExpanded = false; onRemove() }
                 )
             }
         }

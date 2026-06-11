@@ -32,9 +32,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
@@ -43,7 +46,10 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,11 +60,13 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -84,7 +92,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import dev.neiro.app.data.api.models.StructuredLyrics
+import dev.neiro.app.ui.player.shareNowPlayingCard
 import dev.neiro.app.player.RepeatMode
+import dev.neiro.app.ui.components.AddToPlaylistDialog
+import dev.neiro.app.ui.playlists.PlaylistActionViewModel
 import dev.neiro.app.ui.theme.DefaultNeiroPalette
 import dev.neiro.app.ui.theme.NieroTheme
 import dev.neiro.app.ui.theme.extractPalette
@@ -93,13 +105,36 @@ import dev.neiro.app.ui.theme.extractPalette
 @Composable
 fun FullscreenPlayer(
     navController: NavController,
-    viewModel: PlayerViewModel = hiltViewModel()
+    viewModel: PlayerViewModel = hiltViewModel(),
+    playlistActionViewModel: PlaylistActionViewModel = hiltViewModel()
 ) {
     val state by viewModel.playerState.collectAsStateWithLifecycle()
     val lastFm by viewModel.lastFmState.collectAsStateWithLifecycle()
+    val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
+    val showLyrics by viewModel.showLyrics.collectAsStateWithLifecycle()
+    val playlists by playlistActionViewModel.playlists.collectAsStateWithLifecycle()
     val song = state.currentSong ?: run {
         navController.popBackStack()
         return
+    }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+
+    // Tick every second so the sleep timer countdown stays fresh
+    var tickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            tickMs = System.currentTimeMillis()
+        }
+    }
+
+    val sleepRemainingMs = state.sleepTimerEndMs?.let { it - tickMs }?.coerceAtLeast(0L)
+    val sleepRemainingText = sleepRemainingMs?.let {
+        val mins = (it / 60000).toInt()
+        val secs = ((it % 60000) / 1000).toInt()
+        if (mins > 0) "${mins}m" else "${secs}s"
     }
 
     val context = LocalContext.current
@@ -186,6 +221,38 @@ fun FullscreenPlayer(
                         textAlign = TextAlign.Center,
                         letterSpacing = MaterialTheme.typography.labelSmall.letterSpacing
                     )
+                    if (lyrics != null) {
+                        IconButton(onClick = { viewModel.toggleLyrics() }) {
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = "Lyrics",
+                                tint = if (showLyrics) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    // Sleep timer button
+                    IconButton(onClick = { showSleepTimerDialog = true }) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Bedtime,
+                                contentDescription = "Sleep Timer",
+                                tint = if (state.sleepTimerEndMs != null) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            if (sleepRemainingText != null) {
+                                Text(
+                                    text = sleepRemainingText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.8f
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = { showQueue = true }) {
                         Icon(
                             Icons.Default.QueueMusic,
@@ -193,6 +260,36 @@ fun FullscreenPlayer(
                             tint = if (state.queue.size > 1) Color.White else Color.White.copy(alpha = 0.4f),
                             modifier = Modifier.size(24.dp)
                         )
+                    }
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "More options",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Add to Playlist") },
+                                onClick = {
+                                    showMoreMenu = false
+                                    playlistActionViewModel.loadPlaylists()
+                                    showPlaylistDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share Now Playing") },
+                                onClick = {
+                                    showMoreMenu = false
+                                    scope.launch { shareNowPlayingCard(context, song) }
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -290,6 +387,33 @@ fun FullscreenPlayer(
                                     }
                                 )
                             }
+                            // ── Audio quality badges ───────────────────
+                            val formatLabel = when (song.suffix?.lowercase()) {
+                                "flac"       -> "FLAC"
+                                "opus"       -> "OPUS"
+                                "ogg", "oga" -> "OGG"
+                                "aac", "m4a" -> "AAC"
+                                "wav"        -> "WAV"
+                                "wma"        -> "WMA"
+                                "mp3"        -> null  // too common to show
+                                else         -> song.suffix?.uppercase()
+                            }
+                            val bitrateLabel = song.bitRate?.takeIf { it > 0 }
+                                ?.let { if (it >= 1000) "${it / 1000}.${(it % 1000) / 100}M" else "${it}k" }
+                            if (formatLabel != null || bitrateLabel != null) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (formatLabel != null) {
+                                        QualityBadge(
+                                            label = formatLabel,
+                                            highlight = formatLabel == "FLAC" || formatLabel == "WAV"
+                                        )
+                                    }
+                                    if (bitrateLabel != null) {
+                                        QualityBadge(label = bitrateLabel)
+                                    }
+                                }
+                            }
                             val userPlays = lastFm.info?.userPlayCountLong ?: 0L
                             if (userPlays > 0) {
                                 Spacer(Modifier.height(2.dp))
@@ -315,42 +439,64 @@ fun FullscreenPlayer(
                     Spacer(Modifier.height(12.dp))
 
                     // ── Seek bar ───────────────────────────────────────
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Slider(
-                            value = seekValue,
-                            onValueChange = { v ->
-                                seekJob?.cancel()
-                                isSeeking = true
-                                seekValue = v
-                            },
-                            onValueChangeFinished = {
-                                viewModel.seekTo((seekValue * state.durationMs).toLong())
-                                seekJob = scope.launch {
-                                    delay(600)
-                                    isSeeking = false
-                                }
-                            },
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = Color.White,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.25f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                    if (state.isLiveStream) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = formatMs(if (isSeeking) (seekValue * state.durationMs).toLong() else state.positionMs),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.6f)
+                                text = "LIVE",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = Color(0xFFE5484D),
+                                modifier = Modifier
+                                    .background(
+                                        Color(0xFFE5484D).copy(alpha = 0.15f),
+                                        androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
                             )
-                            Text(
-                                text = formatMs(state.durationMs),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.6f)
+                        }
+                    } else {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Slider(
+                                value = seekValue,
+                                onValueChange = { v ->
+                                    seekJob?.cancel()
+                                    isSeeking = true
+                                    seekValue = v
+                                },
+                                onValueChangeFinished = {
+                                    viewModel.seekTo((seekValue * state.durationMs).toLong())
+                                    seekJob = scope.launch {
+                                        delay(600)
+                                        isSeeking = false
+                                    }
+                                },
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color.White,
+                                    activeTrackColor = Color.White,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = formatMs(if (isSeeking) (seekValue * state.durationMs).toLong() else state.positionMs),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = formatMs(state.durationMs),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
 
@@ -460,6 +606,47 @@ fun FullscreenPlayer(
                     }
                 }
             }
+
+            // ── Layer 4: Lyrics overlay ────────────────────────────────
+            if (showLyrics && lyrics != null) {
+                LyricsOverlay(
+                    lyrics = lyrics!!,
+                    positionMs = state.positionMs,
+                    onDismiss = { viewModel.toggleLyrics() },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        // ── Add to Playlist dialog ─────────────────────────────────────
+        if (showPlaylistDialog) {
+            AddToPlaylistDialog(
+                playlists = playlists,
+                onDismiss = { showPlaylistDialog = false },
+                onAddToPlaylist = { playlistId ->
+                    playlistActionViewModel.addToPlaylist(playlistId, listOf(song.id))
+                },
+                onCreateNewPlaylist = { name ->
+                    playlistActionViewModel.createAndAddToPlaylist(name, listOf(song.id))
+                }
+            )
+        }
+
+        // ── Sleep Timer dialog ─────────────────────────────────────────
+        if (showSleepTimerDialog) {
+            SleepTimerDialog(
+                currentEndMs = state.sleepTimerEndMs,
+                remainingMs = sleepRemainingMs,
+                onSetTimer = { durationMs ->
+                    viewModel.setSleepTimer(durationMs)
+                    showSleepTimerDialog = false
+                },
+                onCancel = {
+                    viewModel.cancelSleepTimer()
+                    showSleepTimerDialog = false
+                },
+                onDismiss = { showSleepTimerDialog = false }
+            )
         }
 
         // ── Queue bottom sheet ─────────────────────────────────────────
@@ -479,6 +666,79 @@ fun FullscreenPlayer(
                         viewModel.seekToQueueItem(index)
                     },
                     onDismiss = { showQueue = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricsOverlay(
+    lyrics: StructuredLyrics,
+    positionMs: Long,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lines = lyrics.line
+    if (lines.isEmpty()) return
+
+    val currentIndex = if (lyrics.synced) {
+        val adjustedPos = positionMs + lyrics.offset
+        lines.indexOfLast { (it.start ?: 0L) <= adjustedPos }.coerceAtLeast(0)
+    } else 0
+
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentIndex) {
+        if (lyrics.synced && lines.isNotEmpty()) {
+            listState.animateScrollToItem(
+                index = currentIndex.coerceIn(0, lines.size - 1),
+                scrollOffset = -200
+            )
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.75f))
+            .clickable { onDismiss() }
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(vertical = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(lines) { index, line ->
+                val isCurrent = lyrics.synced && index == currentIndex
+                Text(
+                    text = line.value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.35f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                )
+            }
+        }
+
+        // ── Close / dismiss hint ───────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 8.dp, end = 8.dp),
+        ) {
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Close lyrics",
+                    tint = Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
@@ -592,9 +852,103 @@ private fun QueueSheet(
     }
 }
 
+@Composable
+private fun SleepTimerDialog(
+    currentEndMs: Long?,
+    remainingMs: Long?,
+    onSetTimer: (durationMs: Long) -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val presets = listOf(
+        "5 min" to 5 * 60_000L,
+        "10 min" to 10 * 60_000L,
+        "15 min" to 15 * 60_000L,
+        "20 min" to 20 * 60_000L,
+        "30 min" to 30 * 60_000L,
+        "45 min" to 45 * 60_000L,
+        "60 min" to 60 * 60_000L
+    )
+
+    val remainingText = remainingMs?.let {
+        val mins = (it / 60000).toInt()
+        val secs = ((it % 60000) / 1000).toInt()
+        if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Bedtime,
+                contentDescription = null,
+                tint = if (currentEndMs != null) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        title = {
+            Text(text = "Sleep Timer")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (currentEndMs != null && remainingText != null) {
+                    Text(
+                        text = "Timer active: $remainingText remaining",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(4.dp))
+                }
+                presets.forEach { (label, durationMs) ->
+                    TextButton(
+                        onClick = { onSetTimer(durationMs) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            if (currentEndMs != null) {
+                TextButton(onClick = onCancel) {
+                    Text("Cancel Timer", color = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Dismiss")
+                }
+            }
+        }
+    )
+}
+
 private fun formatMs(ms: Long): String {
     val totalSeconds = ms / 1000
     val m = totalSeconds / 60
     val s = totalSeconds % 60
     return "%d:%02d".format(m, s)
+}
+
+@Composable
+private fun QualityBadge(label: String, highlight: Boolean = false) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        color = if (highlight) Color(0xFF6DD5FA) else Color.White.copy(alpha = 0.55f),
+        modifier = Modifier
+            .background(
+                color = if (highlight) Color(0xFF6DD5FA).copy(alpha = 0.15f)
+                        else Color.White.copy(alpha = 0.08f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    )
 }

@@ -51,6 +51,7 @@ import coil.compose.AsyncImage
 import dev.neiro.app.data.api.models.AlbumDto
 import dev.neiro.app.data.api.models.ArtistDto
 import dev.neiro.app.data.api.models.PlaylistDto
+import dev.neiro.app.data.api.models.PodcastEpisodeWithPodcast
 
 @Composable
 fun HomeScreen(
@@ -300,22 +301,66 @@ fun HomeScreen(
                                 }
                             }
 
-                            is SectionItems.LastFmTopArtists -> item(key = "lfm_artists_${sectionContent.config.id}") {
-                                LastFmArtistShelfRow(
-                                    artists = items.items,
-                                    itemShape = sectionContent.config.itemShape,
-                                    itemSize = sectionContent.config.itemSize,
-                                    onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
-                                )
+                            is SectionItems.LastFmTopArtists -> when (sectionContent.config.layout) {
+                                SectionLayout.SHELF -> item(key = "lfm_artists_shelf_${sectionContent.config.id}") {
+                                    LastFmArtistShelfRow(
+                                        artists = items.items,
+                                        itemShape = sectionContent.config.itemShape,
+                                        itemSize = sectionContent.config.itemSize,
+                                        onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
+                                    )
+                                }
+                                SectionLayout.GRID -> {
+                                    val cols = when (sectionContent.config.itemSize) { ItemSize.SMALL -> 3; ItemSize.LARGE -> 1; else -> 2 }
+                                    val rows = items.items.chunked(cols)
+                                    items(rows, key = { "lfm_artist_grid_${sectionContent.config.id}_${it.first().name}" }) { row ->
+                                        LastFmArtistGridRow(
+                                            row = row, cols = cols,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
+                                        )
+                                    }
+                                }
+                                SectionLayout.LIST -> item(key = "lfm_artists_list_${sectionContent.config.id}") {
+                                    MultiColumnList(items = items.items, itemsPerColumn = 4) { artist ->
+                                        LastFmArtistListRow(
+                                            artist = artist,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
+                                        )
+                                    }
+                                }
                             }
 
-                            is SectionItems.LastFmTopAlbums -> item(key = "lfm_albums_${sectionContent.config.id}") {
-                                LastFmAlbumShelfRow(
-                                    albums = items.items,
-                                    itemShape = sectionContent.config.itemShape,
-                                    itemSize = sectionContent.config.itemSize,
-                                    onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
-                                )
+                            is SectionItems.LastFmTopAlbums -> when (sectionContent.config.layout) {
+                                SectionLayout.SHELF -> item(key = "lfm_albums_shelf_${sectionContent.config.id}") {
+                                    LastFmAlbumShelfRow(
+                                        albums = items.items,
+                                        itemShape = sectionContent.config.itemShape,
+                                        itemSize = sectionContent.config.itemSize,
+                                        onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
+                                    )
+                                }
+                                SectionLayout.GRID -> {
+                                    val cols = when (sectionContent.config.itemSize) { ItemSize.SMALL -> 3; ItemSize.LARGE -> 1; else -> 2 }
+                                    val rows = items.items.chunked(cols)
+                                    items(rows, key = { "lfm_album_grid_${sectionContent.config.id}_${it.first().name}" }) { row ->
+                                        LastFmAlbumGridRow(
+                                            row = row, cols = cols,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
+                                        )
+                                    }
+                                }
+                                SectionLayout.LIST -> item(key = "lfm_albums_list_${sectionContent.config.id}") {
+                                    MultiColumnList(items = items.items, itemsPerColumn = 4) { album ->
+                                        LastFmAlbumListRow(
+                                            album = album,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
+                                        )
+                                    }
+                                }
                             }
 
                             is SectionItems.LastFmTopTracks -> item(key = "lfm_tracks_${sectionContent.config.id}") {
@@ -339,8 +384,50 @@ fun HomeScreen(
                                 }
                             }
 
-                            is SectionItems.Genres -> item(key = "genres_${sectionContent.config.id}") {
-                                GenreShelfRow(genres = items.items)
+                            is SectionItems.LovedTracks -> item(key = "loved_tracks_${sectionContent.config.id}") {
+                                when (sectionContent.config.layout) {
+                                    SectionLayout.SHELF, SectionLayout.GRID -> LastFmTopTracksShelf(
+                                        tracks = items.items,
+                                        itemShape = sectionContent.config.itemShape,
+                                        itemSize = sectionContent.config.itemSize,
+                                        onTrackClick = { track -> viewModel.playTopTrack(track) }
+                                    )
+                                    SectionLayout.LIST -> MultiColumnList(
+                                        items = items.items,
+                                        itemsPerColumn = 4
+                                    ) { track ->
+                                        LastFmTrackListRow(
+                                            track = track,
+                                            index = items.items.indexOf(track),
+                                            onTrackClick = { viewModel.playTopTrack(track) }
+                                        )
+                                    }
+                                }
+                            }
+
+                            is SectionItems.Genres -> when (sectionContent.config.layout) {
+                                SectionLayout.SHELF -> item(key = "genres_shelf_${sectionContent.config.id}") {
+                                    GenreShelfRow(genres = items.items)
+                                }
+                                SectionLayout.GRID -> {
+                                    val cols = when (sectionContent.config.itemSize) { ItemSize.SMALL -> 3; ItemSize.LARGE -> 1; else -> 2 }
+                                    val rows = items.items.chunked(cols)
+                                    items(rows, key = { "genre_grid_${sectionContent.config.id}_${it.first().name}" }) { row ->
+                                        GenreGridRow(row = row, cols = cols)
+                                    }
+                                }
+                                SectionLayout.LIST -> item(key = "genres_list_${sectionContent.config.id}") {
+                                    MultiColumnList(items = items.items, itemsPerColumn = 6) { genre ->
+                                        GenreListRow(genre = genre)
+                                    }
+                                }
+                            }
+
+                            is SectionItems.Podcasts -> item(key = "podcasts_shelf_${sectionContent.config.id}") {
+                                PodcastEpisodesShelfRow(
+                                    episodes = items.items,
+                                    onEpisodeClick = { viewModel.playPodcastEpisode(it) }
+                                )
                             }
                         }
                     }
@@ -1066,6 +1153,206 @@ private fun LastFmAlbumShelfRow(
     }
 }
 
+// ── GRID layout — Last.fm Artists ────────────────────────────────────────────
+
+@Composable
+private fun LastFmArtistGridRow(
+    row: List<LastFmMatchedArtist>,
+    cols: Int = 2,
+    itemShape: ItemShape = ItemShape.CIRCLE,
+    onArtistClick: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        row.forEach { artist ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (artist.subsonicId != null) Modifier.clickable { onArtistClick(artist.subsonicId) } else Modifier),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = artist.coverArtUrl,
+                    contentDescription = artist.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(itemShape.artAspectRatio())
+                        .clip(itemShape.clipShape())
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = artist.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (artist.subsonicId != null) MaterialTheme.colorScheme.onBackground
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "${artist.playCount} plays",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+// ── LIST layout — Last.fm Artists ─────────────────────────────────────────────
+
+@Composable
+private fun LastFmArtistListRow(
+    artist: LastFmMatchedArtist,
+    itemShape: ItemShape = ItemShape.CIRCLE,
+    onArtistClick: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (artist.subsonicId != null) Modifier.clickable { onArtistClick(artist.subsonicId) } else Modifier)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = artist.coverArtUrl,
+            contentDescription = artist.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(itemShape.clipShape())
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = artist.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (artist.subsonicId != null) MaterialTheme.colorScheme.onBackground
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${artist.playCount} plays",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ── GRID layout — Last.fm Albums ──────────────────────────────────────────────
+
+@Composable
+private fun LastFmAlbumGridRow(
+    row: List<LastFmMatchedAlbum>,
+    cols: Int = 2,
+    itemShape: ItemShape = ItemShape.ROUNDED,
+    onAlbumClick: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        row.forEach { album ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (album.subsonicId != null) Modifier.clickable { onAlbumClick(album.subsonicId) } else Modifier)
+            ) {
+                AsyncImage(
+                    model = album.coverArtUrl,
+                    contentDescription = album.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(itemShape.artAspectRatio())
+                        .clip(itemShape.clipShape())
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = album.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (album.subsonicId != null) MaterialTheme.colorScheme.onBackground
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = album.artistName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+// ── LIST layout — Last.fm Albums ──────────────────────────────────────────────
+
+@Composable
+private fun LastFmAlbumListRow(
+    album: LastFmMatchedAlbum,
+    itemShape: ItemShape = ItemShape.ROUNDED,
+    onAlbumClick: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (album.subsonicId != null) Modifier.clickable { onAlbumClick(album.subsonicId) } else Modifier)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = album.coverArtUrl,
+            contentDescription = album.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(itemShape.clipShape())
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = album.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (album.subsonicId != null) MaterialTheme.colorScheme.onBackground
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = album.artistName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${album.playCount} plays",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 // ── Last.fm Top Tracks shelf (horizontal scroll) ──────────────────────────────
 
 @Composable
@@ -1218,6 +1505,73 @@ private fun GenreShelfRow(genres: List<GenreItem>) {
     }
 }
 
+// ── GRID layout — Genres ─────────────────────────────────────────────────────
+
+@Composable
+private fun GenreGridRow(row: List<GenreItem>, cols: Int = 2) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        row.forEach { genre ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = genre.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${genre.albumCount} albums",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+// ── LIST layout — Genres ──────────────────────────────────────────────────────
+
+@Composable
+private fun GenreListRow(genre: GenreItem) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = genre.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${genre.albumCount} albums · ${genre.songCount} songs",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 // ── Error / empty states ──────────────────────────────────────────────────────
 
 @Composable
@@ -1247,5 +1601,68 @@ private fun NoServerPlaceholder(modifier: Modifier, onOpenSettings: () -> Unit) 
         )
         Spacer(Modifier.height(24.dp))
         Button(onClick = onOpenSettings) { Text("Open Settings") }
+    }
+}
+
+// ── Podcasts shelf ────────────────────────────────────────────────────────────
+
+@Composable
+private fun PodcastEpisodesShelfRow(
+    episodes: List<PodcastEpisodeWithPodcast>,
+    onEpisodeClick: (PodcastEpisodeWithPodcast) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(episodes, key = { it.episode.guid }) { item ->
+            PodcastEpisodeShelfCard(item = item, onClick = { onEpisodeClick(item) })
+        }
+    }
+}
+
+@Composable
+private fun PodcastEpisodeShelfCard(
+    item: PodcastEpisodeWithPodcast,
+    onClick: () -> Unit
+) {
+    val artUrl = item.episode.imageUrl ?: item.subscription.imageUrl
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            if (artUrl != null) {
+                AsyncImage(
+                    model = artUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = item.episode.title,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = item.subscription.title,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

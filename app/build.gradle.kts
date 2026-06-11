@@ -63,7 +63,6 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.media3.ui)
-
     // Networking
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.gson)
@@ -84,6 +83,9 @@ dependencies {
 
     // Blur-behind (liquid glass)
     implementation(libs.haze)
+
+    // Glance (home screen widget)
+    implementation(libs.glance.appwidget)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

@@ -63,4 +63,11 @@ class PlaylistDetailViewModel @Inject constructor(
             playerController.playTrack(shuffled.first(), shuffled, 0)
         }
     }
+
+    fun removeSong(songIndex: Int) {
+        viewModelScope.launch {
+            musicRepository.removeFromPlaylist(playlistId, songIndex)
+            load()
+        }
+    }
 }

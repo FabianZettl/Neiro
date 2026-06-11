@@ -5,6 +5,7 @@ import com.google.gson.reflect.TypeToken
 import dev.neiro.app.data.api.models.AlbumDto
 import dev.neiro.app.data.api.models.ArtistDto
 import dev.neiro.app.data.api.models.PlaylistDto
+import dev.neiro.app.data.api.models.PodcastEpisodeWithPodcast
 import java.util.UUID
 
 // ── Layout & Content ─────────────────────────────────────────────────────────
@@ -19,8 +20,10 @@ enum class SectionContentType(val displayName: String) {
     ALBUMS("Albums"),
     ARTISTS("Artists"),
     PLAYLISTS("Playlists"),
-    TRACKS("Tracks"),
-    GENRES("Genres")
+    TRACKS("Top Tracks"),
+    LOVED_TRACKS("Loved Tracks"),
+    GENRES("Genres"),
+    PODCASTS("Latest Podcast Episodes")
 }
 
 enum class DataSource(val displayName: String) {
@@ -114,7 +117,9 @@ sealed class SectionItems {
     data class LastFmTopArtists(val items: List<LastFmMatchedArtist>) : SectionItems()
     data class LastFmTopAlbums(val items: List<LastFmMatchedAlbum>) : SectionItems()
     data class LastFmTopTracks(val items: List<LastFmMatchedTrack>) : SectionItems()
+    data class LovedTracks(val items: List<LastFmMatchedTrack>) : SectionItems()
     data class Genres(val items: List<GenreItem>) : SectionItems()
+    data class Podcasts(val items: List<PodcastEpisodeWithPodcast>) : SectionItems()
     fun isEmpty() = when (this) {
         is Albums           -> items.isEmpty()
         is Playlists        -> items.isEmpty()
@@ -122,7 +127,9 @@ sealed class SectionItems {
         is LastFmTopArtists -> items.isEmpty()
         is LastFmTopAlbums  -> items.isEmpty()
         is LastFmTopTracks  -> items.isEmpty()
+        is LovedTracks      -> items.isEmpty()
         is Genres           -> items.isEmpty()
+        is Podcasts         -> items.isEmpty()
     }
 }
 

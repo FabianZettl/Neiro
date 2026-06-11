@@ -6,10 +6,12 @@ import dev.neiro.app.data.api.models.ArtistDetailApiResponse
 import dev.neiro.app.data.api.models.ArtistInfo2ApiResponse
 import dev.neiro.app.data.api.models.ArtistsApiResponse
 import dev.neiro.app.data.api.models.GenresApiResponse
+import dev.neiro.app.data.api.models.InternetRadioStationsApiResponse
 import dev.neiro.app.data.api.models.PingApiResponse
 import dev.neiro.app.data.api.models.PlaylistApiResponse
 import dev.neiro.app.data.api.models.PlaylistsApiResponse
 import dev.neiro.app.data.api.models.Search3ApiResponse
+import dev.neiro.app.data.api.models.LyricsApiResponse
 import dev.neiro.app.data.api.models.SimilarSongsApiResponse
 import dev.neiro.app.data.api.models.SongApiResponse
 import retrofit2.http.GET
@@ -91,4 +93,34 @@ interface SubsonicApi {
         @Query("id") songId: String,
         @Query("count") count: Int = 20
     ): SimilarSongsApiResponse
+
+    @GET("rest/getLyricsBySongId")
+    suspend fun getLyricsBySongId(
+        @Query("id") id: String
+    ): LyricsApiResponse
+
+    @GET("rest/createPlaylist")
+    suspend fun createPlaylist(
+        @Query("name") name: String
+    ): PingApiResponse
+
+    @GET("rest/updatePlaylist")
+    suspend fun addSongsToPlaylist(
+        @Query("playlistId") playlistId: String,
+        @Query("songIdToAdd") songIdToAdd: List<String>
+    ): PingApiResponse
+
+    @GET("rest/updatePlaylist")
+    suspend fun removeFromPlaylist(
+        @Query("playlistId") playlistId: String,
+        @Query("songIndexToRemove") songIndexToRemove: Int
+    ): PingApiResponse
+
+    @GET("rest/deletePlaylist")
+    suspend fun deletePlaylist(
+        @Query("id") id: String
+    ): PingApiResponse
+
+    @GET("rest/getInternetRadioStations")
+    suspend fun getInternetRadioStations(): InternetRadioStationsApiResponse
 }

@@ -12,13 +12,18 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.neiro.app.data.api.SubsonicAuthInterceptor
+import dev.neiro.app.data.api.models.InternetRadioStationDto
+import dev.neiro.app.data.api.models.PodcastEpisode
+import dev.neiro.app.data.api.models.PodcastSubscription
 import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
 import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.di.ApplicationScope
+import dev.neiro.app.widget.updateNieroWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +64,8 @@ class PlayerController @Inject constructor(
 
     // AutoDJ — prevent concurrent fetch jobs
     @Volatile private var autoDjRunning = false
+
+    private var sleepTimerJob: Job? = null
 
     var autoDjEnabled: Boolean = true
 
@@ -111,6 +118,11 @@ class PlayerController @Inject constructor(
         controller.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _playerState.value = _playerState.value.copy(isPlaying = isPlaying)
+                val song = _playerState.value.currentSong ?: return
+                scope.launch {
+                    try { updateNieroWidget(context, song.title, song.artist, isPlaying, song.coverArtUrl) }
+                    catch (e: Exception) { Log.w("NieroPlayer", "Widget update failed: ${e.message}") }
+                }
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -145,6 +157,13 @@ class PlayerController @Inject constructor(
                 val remaining = controller.mediaItemCount - index - 1
                 if (autoDjEnabled && remaining <= 1 && song != null) {
                     triggerAutoDj(song)
+                }
+                // Update home screen widget
+                if (song != null) {
+                    scope.launch {
+                        try { updateNieroWidget(context, song.title, song.artist, controller.isPlaying, song.coverArtUrl) }
+                        catch (e: Exception) { Log.w("NieroPlayer", "Widget update failed: ${e.message}") }
+                    }
                 }
             }
 
@@ -208,15 +227,15 @@ class PlayerController @Inject constructor(
 
     suspend fun playTrack(song: SongDto, queue: List<SongDto>, startIndex: Int = 0) {
         val prefs = preferences.prefsFlow.first()
+        currentQueue = queue
+        val mediaItems = queue.map { buildMediaItem(it, prefs) }
+
         val controller = awaitController() ?: run {
             _playerState.value = _playerState.value.copy(
                 error = "Could not connect to media service"
             )
             return
         }
-
-        currentQueue = queue
-        val mediaItems = queue.map { buildMediaItem(it, prefs) }
 
         // MediaController is thread-safe in Media3 — no withContext needed
         controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
@@ -231,7 +250,8 @@ class PlayerController @Inject constructor(
             error = null,
             // Use API duration immediately — HTTP streams often have no Content-Length
             durationMs = song.duration * 1000L,
-            positionMs = 0L
+            positionMs = 0L,
+            isLiveStream = false
         )
     }
 
@@ -356,6 +376,103 @@ class PlayerController @Inject constructor(
         _playerState.value = _playerState.value.copy(queue = currentQueue)
     }
 
+    fun setSleepTimer(durationMs: Long) {
+        sleepTimerJob?.cancel()
+        val endMs = System.currentTimeMillis() + durationMs
+        _playerState.value = _playerState.value.copy(sleepTimerEndMs = endMs)
+        sleepTimerJob = scope.launch {
+            delay(durationMs)
+            val controller = _controller.value
+            if (controller?.isPlaying == true) controller.pause()
+            _playerState.value = _playerState.value.copy(sleepTimerEndMs = null)
+            sleepTimerJob = null
+        }
+    }
+
+    suspend fun playRadio(station: InternetRadioStationDto) {
+        val controller = awaitController() ?: return
+        val mediaItem = MediaItem.Builder()
+            .setUri(station.streamUrl)
+            .setMediaId("radio_${station.id}")
+            .setMimeType("audio/mpeg")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(station.name)
+                    .setArtist("Internet Radio")
+                    .build()
+            )
+            .build()
+
+        controller.setMediaItem(mediaItem)
+        controller.prepare()
+        controller.play()
+
+        val pseudoSong = SongDto(
+            id = "radio_${station.id}",
+            title = station.name,
+            artist = "Internet Radio",
+            duration = 0
+        )
+        currentQueue = listOf(pseudoSong)
+        _playerState.value = _playerState.value.copy(
+            currentSong = pseudoSong,
+            queue = listOf(pseudoSong),
+            queueIndex = 0,
+            isPlaying = true,
+            error = null,
+            durationMs = 0L,
+            positionMs = 0L,
+            isLiveStream = true
+        )
+    }
+
+    suspend fun playPodcastEpisode(episode: PodcastEpisode, subscription: PodcastSubscription) {
+        val controller = awaitController() ?: return
+        val artUrl = episode.imageUrl ?: subscription.imageUrl
+        val mediaItem = MediaItem.Builder()
+            .setUri(episode.audioUrl)
+            .setMediaId("podcast_${episode.guid.hashCode()}")
+            .setMimeType(episode.mimeType ?: "audio/mpeg")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(episode.title)
+                    .setArtist(subscription.title)
+                    .setAlbumTitle(subscription.title)
+                    .setArtworkUri(artUrl?.let { android.net.Uri.parse(it) })
+                    .build()
+            )
+            .build()
+
+        controller.setMediaItem(mediaItem)
+        controller.prepare()
+        controller.play()
+
+        val pseudoSong = SongDto(
+            id           = "podcast_${episode.guid.hashCode()}",
+            title        = episode.title,
+            artist       = subscription.title,
+            duration     = episode.durationSeconds?.toInt() ?: 0,
+            coverArtUrl  = artUrl
+        )
+        currentQueue = listOf(pseudoSong)
+        _playerState.value = _playerState.value.copy(
+            currentSong  = pseudoSong,
+            queue        = listOf(pseudoSong),
+            queueIndex   = 0,
+            isPlaying    = true,
+            error        = null,
+            durationMs   = (episode.durationSeconds ?: 0L) * 1000L,
+            positionMs   = 0L,
+            isLiveStream = false
+        )
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _playerState.value = _playerState.value.copy(sleepTimerEndMs = null)
+    }
+
     private fun buildMediaItem(song: SongDto, prefs: NieroPrefs, timeOffsetSecs: Int = 0): MediaItem {
         val salt = SubsonicAuthInterceptor.generateSalt()
         val token = SubsonicAuthInterceptor.md5(prefs.password + salt)
@@ -367,9 +484,22 @@ class PlayerController @Inject constructor(
 
         Log.d("NieroPlayer", "Stream URL (masked): $base/rest/stream?id=${song.id}&u=${prefs.username}&t=***&s=***&v=1.16.1&c=neiro$bitrateParam${if (timeOffsetSecs > 0) "&timeOffset=$timeOffsetSecs" else ""}")
 
-        val builder = MediaItem.Builder()
+        // CastPlayer requires mimeType; derive from Subsonic contentType or suffix, default audio/mpeg
+        val mimeType = song.contentType
+            ?: when (song.suffix?.lowercase()) {
+                "flac"          -> "audio/flac"
+                "ogg", "oga"    -> "audio/ogg"
+                "opus"          -> "audio/opus"
+                "aac", "m4a"    -> "audio/aac"
+                "wav"           -> "audio/wav"
+                "wma"           -> "audio/x-ms-wma"
+                else            -> "audio/mpeg"
+            }
+
+        return MediaItem.Builder()
             .setUri(streamUrl)
             .setMediaId(song.id)
+            .setMimeType(mimeType)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(song.title)
@@ -378,7 +508,6 @@ class PlayerController @Inject constructor(
                     .setArtworkUri(song.coverArtUrl?.let { android.net.Uri.parse(it) })
                     .build()
             )
-
-        return builder.build()
+            .build()
     }
 }

@@ -2,13 +2,17 @@ package dev.neiro.app.player
 
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
 
+@UnstableApi
 @AndroidEntryPoint
 class NieroMediaService : MediaSessionService() {
 
@@ -21,7 +25,6 @@ class NieroMediaService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        // Allow HTTP→HTTPS redirects (Navidrome often redirects to HTTPS)
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
 
@@ -32,7 +35,17 @@ class NieroMediaService : MediaSessionService() {
             .build()
 
         NieroPlayerHolder.player = player
-        mediaSession = MediaSession.Builder(this, player).build()
+
+        // CoilBitmapLoader loads album art (incl. authenticated URLs) for the notification
+        mediaSession = MediaSession.Builder(this, player)
+            .setBitmapLoader(CoilBitmapLoader(this))
+            .build()
+
+        // Colorized notification: system extracts palette from album art on Android 12+
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .build()
+        notificationProvider.setSmallIcon(androidx.media3.session.R.drawable.media3_notification_small_icon)
+        setMediaNotificationProvider(notificationProvider)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

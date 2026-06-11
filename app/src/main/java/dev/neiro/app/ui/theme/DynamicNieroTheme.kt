@@ -56,9 +56,15 @@ fun DynamicNieroTheme(
     val systemDark   = isSystemInDarkTheme()
     val context      = LocalContext.current
 
+    val darkTheme = when (themeMode) {
+        ThemeMode.DARK   -> true
+        ThemeMode.LIGHT  -> false
+        ThemeMode.SYSTEM -> systemDark
+    }
+
     var palette by remember { mutableStateOf(DefaultNeiroPalette) }
-    LaunchedEffect(playerState.currentSong?.coverArtUrl) {
-        if (dynamicColor) palette = extractPalette(context, playerState.currentSong?.coverArtUrl)
+    LaunchedEffect(playerState.currentSong?.coverArtUrl, darkTheme) {
+        if (dynamicColor) palette = extractPalette(context, playerState.currentSong?.coverArtUrl, darkTheme)
     }
 
     val effectivePalette = if (dynamicColor) {
@@ -67,12 +73,6 @@ fun DynamicNieroTheme(
         val accent = runCatching { android.graphics.Color.parseColor(accentHex) }
             .map { Color(it) }.getOrElse { Color(0xFFE5484D) }
         DefaultNeiroPalette.copy(accent = accent)
-    }
-
-    val darkTheme = when (themeMode) {
-        ThemeMode.DARK   -> true
-        ThemeMode.LIGHT  -> false
-        ThemeMode.SYSTEM -> systemDark
     }
 
     NieroTheme(palette = effectivePalette, darkTheme = darkTheme, content = content)

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -43,7 +44,8 @@ data class SettingsUiState(
     val lastFmApiSecret: String = "",
     val lastFmPassword: String = "",
     val lastFmSessionKey: String = "",
-    val lastFmAuthState: ConnectionState = ConnectionState.Idle
+    val lastFmAuthState: ConnectionState = ConnectionState.Idle,
+    val syncCode: String = ""
 )
 
 @HiltViewModel
@@ -255,6 +257,19 @@ class SettingsViewModel @Inject constructor(
                     ConnectionState.Error(e.localizedMessage ?: "Could not reach server")
                 }
             )
+        }
+    }
+
+    fun generateSyncCode() {
+        viewModelScope.launch {
+            val s = _uiState.value
+            val sectionsJson = preferences.homeSectionsJson.first() ?: ""
+            val raw = buildString {
+                append("${s.serverUrl}\n${s.username}\n${s.password}")
+                if (sectionsJson.isNotBlank()) append("\n$sectionsJson")
+            }
+            val code = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
+            _uiState.value = _uiState.value.copy(syncCode = code)
         }
     }
 

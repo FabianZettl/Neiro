@@ -15,5 +15,7 @@ data class PlayerState(
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val autoDjEnabled: Boolean = true,
-    val error: String? = null
+    val error: String? = null,
+    val sleepTimerEndMs: Long? = null,
+    val isLiveStream: Boolean = false
 )

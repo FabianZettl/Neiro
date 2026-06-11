@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,6 +49,15 @@ class NieroPreferences @Inject constructor(
 
     val themeModeFlow: Flow<String> = dataStore.data.map { it[THEME_MODE_KEY] ?: "DARK" }
 
+    val podcastSubscriptionsJson: Flow<String?> = dataStore.data.map { it[PODCAST_SUBSCRIPTIONS_KEY] }
+
+    suspend fun getPodcastSubscriptions(): String? =
+        dataStore.data.map { it[PODCAST_SUBSCRIPTIONS_KEY] }.first()
+
+    suspend fun savePodcastSubscriptions(json: String) {
+        dataStore.edit { it[PODCAST_SUBSCRIPTIONS_KEY] = json }
+    }
+
     suspend fun savePrefs(nieroPrefs: NieroPrefs) {
         dataStore.edit { prefs ->
             prefs[SERVER_URL_KEY] = nieroPrefs.serverUrl
@@ -84,5 +94,6 @@ class NieroPreferences @Inject constructor(
         val LASTFM_API_KEY = stringPreferencesKey("lastfm_api_key")
         val LASTFM_API_SECRET_KEY = stringPreferencesKey("lastfm_api_secret")
         val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
+        val PODCAST_SUBSCRIPTIONS_KEY = stringPreferencesKey("podcast_subscriptions")
     }
 }

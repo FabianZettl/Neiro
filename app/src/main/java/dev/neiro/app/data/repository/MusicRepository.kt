@@ -11,9 +11,11 @@ import dev.neiro.app.data.api.models.ArtistDto
 import dev.neiro.app.data.api.models.ArtistInfoDto
 import dev.neiro.app.data.api.models.ArtistWithAlbumsDto
 import dev.neiro.app.data.api.models.LibraryStats
+import dev.neiro.app.data.api.models.InternetRadioStationDto
 import dev.neiro.app.data.api.models.PlaylistDto
 import dev.neiro.app.data.api.models.SearchResult3Dto
 import dev.neiro.app.data.api.models.SongDto
+import dev.neiro.app.data.api.models.StructuredLyrics
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
 import kotlinx.coroutines.flow.first
@@ -192,9 +194,11 @@ class MusicRepository @Inject constructor(
     }.getOrElse { emptyList() }
 
     suspend fun searchSongs(query: String, artistQuery: String = ""): List<SongDto> = runCatching {
+        val prefs = preferences.prefsFlow.first()
         val q = if (artistQuery.isNotBlank()) "$query $artistQuery" else query
         api.search3(q, songCount = 5, albumCount = 0, artistCount = 0)
             .response.searchResult3.song
+            .map { song -> song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) }) }
     }.getOrElse { emptyList() }
 
     suspend fun getSimilarSongs(songId: String, count: Int = 20): List<SongDto> = runCatching {
@@ -204,12 +208,30 @@ class MusicRepository @Inject constructor(
         }
     }.getOrElse { emptyList() }
 
+    suspend fun getLyrics(songId: String): StructuredLyrics? = runCatching {
+        val resp = api.getLyricsBySongId(songId)
+        val list = resp.response.lyricsList?.structuredLyrics ?: return@runCatching null
+        list.firstOrNull { it.synced } ?: list.firstOrNull()
+    }.getOrNull()
+
     suspend fun starAlbum(albumId: String) = runCatching { api.star(albumId = albumId) }
     suspend fun unstarAlbum(albumId: String) = runCatching { api.unstar(albumId = albumId) }
 
     suspend fun getPlaylists(): List<PlaylistDto> {
         return api.getPlaylists().response.playlists.playlist
     }
+
+    suspend fun createPlaylist(name: String): Boolean =
+        runCatching { api.createPlaylist(name).response.status == "ok" }.getOrDefault(false)
+
+    suspend fun addSongsToPlaylist(playlistId: String, songIds: List<String>): Boolean =
+        runCatching { api.addSongsToPlaylist(playlistId, songIds).response.status == "ok" }.getOrDefault(false)
+
+    suspend fun removeFromPlaylist(playlistId: String, songIndex: Int): Boolean =
+        runCatching { api.removeFromPlaylist(playlistId, songIndex).response.status == "ok" }.getOrDefault(false)
+
+    suspend fun deletePlaylist(playlistId: String): Boolean =
+        runCatching { api.deletePlaylist(playlistId).response.status == "ok" }.getOrDefault(false)
 
     suspend fun getPlaylist(id: String): PlaylistDto {
         val prefs = preferences.prefsFlow.first()
@@ -220,6 +242,11 @@ class MusicRepository @Inject constructor(
             }
         )
     }
+
+    suspend fun getInternetRadioStations(): List<InternetRadioStationDto> =
+        runCatching {
+            api.getInternetRadioStations().response.internetRadioStations?.stations.orEmpty()
+        }.getOrElse { emptyList() }
 
     fun buildStreamUrl(songId: String, prefs: NieroPrefs): String {
         val salt = SubsonicAuthInterceptor.generateSalt()

@@ -3,6 +3,7 @@ package dev.neiro.app.data.repository
 import dev.neiro.app.data.api.LastFmApi
 import dev.neiro.app.data.api.models.LastFmAlbumInfo
 import dev.neiro.app.data.api.models.LastFmArtistInfo
+import dev.neiro.app.data.api.models.LastFmLovedTrack
 import dev.neiro.app.data.api.models.LastFmTopAlbumsResponse
 import dev.neiro.app.data.api.models.LastFmTopArtistsResponse
 import dev.neiro.app.data.api.models.LastFmTopTracksResponse
@@ -89,6 +90,16 @@ class LastFmRepository @Inject constructor(
                 .map { "${it.name.lowercase()}_${it.artist.name.lowercase()}" }
                 .toSet()
         }.getOrElse { emptySet() }
+    }
+
+    /** Returns the full loved track list (with image URLs) for display. */
+    suspend fun getLovedTracksFull(limit: Int = 500): List<LastFmLovedTrack> {
+        val (user, key) = creds()
+        if (!isConfigured(user, key)) return emptyList()
+        return runCatching {
+            api.getLovedTracks(user = user, apiKey = key, limit = limit)
+                .lovedTracks?.tracks.orEmpty()
+        }.getOrElse { emptyList() }
     }
 
     /** Authenticates with Last.fm using password + API secret, stores the session key. Returns true on success. */

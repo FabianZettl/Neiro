@@ -25,7 +25,9 @@
 - Streams directly from your OpenSubsonic/Navidrome server — no downloads, no caching
 - Media3/ExoPlayer backend with lock-screen controls and persistent notification
 - Configurable streaming quality (Original / 320 / 256 / 192 / 128 kbps)
-- Play, shuffle, skip, seek, skip back, play-next, add-to-queue
+- AutoDJ: automatically queues similar tracks when the queue runs out
+- Sleep timer with countdown display
+- Play, shuffle, repeat, skip, seek, play-next, add-to-queue
 
 ### 🎨 Dynamic Color Theming
 - Every screen adapts its color scheme to the current album art via the Palette API
@@ -38,6 +40,10 @@
 - Liquid-glass mini player with real-time haze/blur effect
 - Album art cross-fade animation on track change
 - Art scales subtly when paused vs. playing
+- Lyrics display (OpenSubsonic structured lyrics)
+- Audio format / bitrate quality badge
+- "Share Now Playing" card (generated image with album art)
+- Sleep timer with live countdown
 
 ### 🏠 Home Screen
 - Fully configurable sections with drag-to-reorder
@@ -45,10 +51,12 @@
 - Artist sections with optional genre filter and sort options
 - Playlist sections
 - **Last.fm Top Artists** and **Top Albums** — cross-referenced with your library for cover art and navigation
+- **Latest Podcast Episodes** section (activatable)
 
 ### 📚 Library
 - Artist detail pages: biography, genre chips, external links (Last.fm, Wikipedia, RateYourMusic), album grid
 - Album detail: compact header, full track list with duration
+- Sort and search in Artists, Albums, and Playlists lists
 - Playlists, starred tracks, search
 
 ### 🎙️ Last.fm Integration
@@ -57,11 +65,24 @@
 - Love / unlove tracks directly from the fullscreen player
 - Configures via Settings with your own API key + session auth
 
+### 📻 Internet Radio
+- Browse and play internet radio stations from your Navidrome server
+
+### 🎙 Podcasts
+- Subscribe to any podcast via RSS feed URL
+- Import/export subscriptions via OPML file
+- Episode list with artwork, date, and duration
+- Stream episodes directly — no downloads needed
+- Latest episodes as an activatable Home section
+
+### 🖼 Home Screen Widget
+- Now-playing widget with album art, track info, play/pause and skip controls
+
 ---
 
 ## 📦 Installation
 
-1. Go to [**Releases**](https://github.com/FabianZettl/Neiro/releases/latest) and download the latest `app-debug.apk`
+1. Go to [**Releases**](https://github.com/FabianZettl/Neiro/releases/latest) and download the latest APK
 2. Enable *Install from unknown sources* on your Android device
 3. Install and open Neiro
 4. In Settings, enter your Navidrome/Subsonic server URL, username and password
@@ -84,6 +105,36 @@ Requires Android SDK with min SDK 26, target SDK 35.
 ---
 
 ## 📋 Changelog
+
+### v0.2.0-alpha *(2025-06-11)*
+
+**New features**
+- Podcast support: subscribe via RSS URL, import via OPML, episode streaming, Latest Episodes home section
+- Internet Radio: browse and play stations from your Navidrome server
+- Sleep timer with live countdown in the player
+- Sort + search in Albums, Artists, and Playlists library screens
+- AutoDJ: auto-queues similar tracks when queue ends
+- Audio quality badges in the fullscreen player (format + bitrate)
+- "Share Now Playing" card from the player overflow menu
+- Home screen widget (album art, track, play/pause, skip)
+- Genre tags and multi-genre filtering on albums
+- Multiple column list layout option for library screens
+
+**Improvements**
+- Last.fm stats driven by sort type — no separate picker
+- Seekbar fix via `timeOffset` parameter for transcoded streams
+- Animated song crossfade in fullscreen player
+- Lyrics support (OpenSubsonic structured lyrics)
+- Home sections: drag-to-reorder, enable/disable, add custom sections
+
+**Bug fixes**
+- Fixed crash when playing songs (widget update on main thread)
+- Fixed navigation back from Now Playing screen
+- Fixed palette extraction using wrong fallback colors in light mode
+- Drawer always uses dark theme to prevent white-on-white rendering
+
+**Removed**
+- Chromecast support (removed for stability; may return in a future release)
 
 ### v0.1.0-alpha *(2025-06-09)*
 - Initial public pre-release
@@ -120,10 +171,10 @@ Requires Android SDK with min SDK 26, target SDK 35.
 
 ## ⚠️ Known Limitations (alpha)
 
-- Shuffle and Repeat in the fullscreen player are not yet wired up
-- No queue/up-next screen yet
-- No ReplayGain support yet
 - No tablet / landscape layout optimisation
+- No ReplayGain support yet
+- Podcast playback does not save resume position yet
+- No podcast search/discovery (subscribe by URL or OPML only)
 
 ---
 

@@ -7,10 +7,21 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.neiro.app.data.api.models.AlbumDto
 import dev.neiro.app.data.repository.MusicRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+enum class AlbumSortOption(val label: String) {
+    DEFAULT("Default"),
+    NAME_ASC("Name A→Z"),
+    NAME_DESC("Name Z→A"),
+    ARTIST_ASC("Artist"),
+    YEAR_DESC("Year ↓"),
+    YEAR_ASC("Year ↑")
+}
 
 data class AlbumsListUiState(
     val albums: List<AlbumDto> = emptyList(),
@@ -26,8 +37,30 @@ class AlbumsListViewModel @Inject constructor(
 
     val albumType: String = savedStateHandle["albumType"] ?: "alphabeticalByName"
 
-    private val _uiState = MutableStateFlow(AlbumsListUiState())
-    val uiState: StateFlow<AlbumsListUiState> = _uiState.asStateFlow()
+    private val _rawAlbums = MutableStateFlow<List<AlbumDto>>(emptyList())
+    private val _isLoading = MutableStateFlow(false)
+    private val _error = MutableStateFlow<String?>(null)
+    val sortOption = MutableStateFlow(AlbumSortOption.DEFAULT)
+    val searchQuery = MutableStateFlow("")
+
+    val uiState: StateFlow<AlbumsListUiState> = combine(
+        _rawAlbums, _isLoading, _error, sortOption, searchQuery
+    ) { raw, loading, error, sort, query ->
+        val filtered = if (query.isBlank()) raw
+        else raw.filter {
+            it.name.contains(query, ignoreCase = true) ||
+            it.artist?.contains(query, ignoreCase = true) == true
+        }
+        val sorted = when (sort) {
+            AlbumSortOption.DEFAULT    -> filtered
+            AlbumSortOption.NAME_ASC   -> filtered.sortedBy { it.name.lowercase() }
+            AlbumSortOption.NAME_DESC  -> filtered.sortedByDescending { it.name.lowercase() }
+            AlbumSortOption.ARTIST_ASC -> filtered.sortedBy { it.artist?.lowercase() ?: "" }
+            AlbumSortOption.YEAR_DESC  -> filtered.sortedByDescending { it.year ?: 0 }
+            AlbumSortOption.YEAR_ASC   -> filtered.sortedBy { it.year ?: Int.MAX_VALUE }
+        }
+        AlbumsListUiState(albums = sorted, isLoading = loading, error = error)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AlbumsListUiState(isLoading = true))
 
     init {
         load()
@@ -35,10 +68,11 @@ class AlbumsListViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _uiState.value = AlbumsListUiState(isLoading = true)
+            _isLoading.value = true
+            _error.value = null
             runCatching { musicRepository.getAlbumsByType(albumType, 500) }
-                .onSuccess { _uiState.value = AlbumsListUiState(albums = it) }
-                .onFailure { _uiState.value = AlbumsListUiState(error = it.message ?: it.javaClass.simpleName) }
+                .onSuccess { _rawAlbums.value = it; _isLoading.value = false }
+                .onFailure { _error.value = it.message ?: it.javaClass.simpleName; _isLoading.value = false }
         }
     }
 }

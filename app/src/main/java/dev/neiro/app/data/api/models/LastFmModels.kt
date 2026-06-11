@@ -152,8 +152,11 @@ data class LastFmLovedTrackArtist(
 
 data class LastFmLovedTrack(
     @SerializedName("name") val name: String = "",
-    @SerializedName("artist") val artist: LastFmLovedTrackArtist = LastFmLovedTrackArtist()
-)
+    @SerializedName("artist") val artist: LastFmLovedTrackArtist = LastFmLovedTrackArtist(),
+    @SerializedName("image") val images: List<LastFmImage> = emptyList()
+) {
+    val imageUrl get() = images.bestUrl()
+}
 
 data class LastFmLovedTracksMeta(
     @SerializedName("track") val tracks: List<LastFmLovedTrack> = emptyList()
