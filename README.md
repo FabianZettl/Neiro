@@ -192,6 +192,16 @@ Requires Android SDK with min SDK 26, target SDK 35.
 
 ---
 
+## 🤖 AI Transparency
+
+Every line of code in this project was written by [Claude Code](https://claude.ai/claude-code) (Anthropic). I have no formal coding background.
+
+What I bring to the table: a clear vision of what the app should do and feel like, hours of hands-on bug testing on a real device, strong opinions about UI quality, and an ongoing effort to keep the codebase clean and well-structured rather than just "working".
+
+I define the features, review the logic, catch the bugs, and push back when something feels wrong — Claude writes the implementation. The result is an app I'm genuinely proud of and use every day.
+
+---
+
 ## 📄 License
 
 MIT
