@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="120" alt="Neiro icon"/>
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="100" alt="Neiro icon"/>
 </p>
 
 <h1 align="center">Neiro (音色)</h1>
 
 <p align="center">
-  An Android music streaming app for <a href="https://opensubsonic.netlify.app/">OpenSubsonic</a> / <a href="https://www.navidrome.org/">Navidrome</a> servers.<br/>
-  Inspired by Apple Music's design language — dynamic color theming, smooth animations, and a liquid-glass mini player.
+  An Android music client for <a href="https://opensubsonic.netlify.app/">OpenSubsonic</a> / <a href="https://www.navidrome.org/">Navidrome</a> — built for music lovers, Last.fm nerds, and anyone who wanted Apple Music's look on their own server.<br/>
+  Dynamic album-art color theming, liquid-glass mini player, and deep Last.fm integration.
 </p>
 
 <p align="center">
@@ -19,7 +19,25 @@
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/now-playing.webp" width="19%" alt="Now Playing"/>
+  <img src="screenshots/home.webp" width="19%" alt="Home Screen"/>
+  <img src="screenshots/album-dark.webp" width="19%" alt="Album Detail"/>
+  <img src="screenshots/album-light.webp" width="19%" alt="Album Detail (Light)"/>
+  <img src="screenshots/customize-home.webp" width="19%" alt="Customize Home"/>
+</p>
+
+---
+
 ## ✨ Features
+
+### 🎨 Dynamic Color Theming
+- Every screen adapts its color scheme to the current album art via the Palette API
+- Smooth animated transitions between color palettes when the song changes
+- Toggle between dynamic color and a fixed accent color (8 presets)
+- Full Light / Dark / System theme support
 
 ### 🎵 Playback
 - Streams directly from your OpenSubsonic/Navidrome server — no downloads, no caching
@@ -29,51 +47,47 @@
 - Sleep timer with countdown display
 - Play, shuffle, repeat, skip, seek, play-next, add-to-queue
 
-### 🎨 Dynamic Color Theming
-- Every screen adapts its color scheme to the current album art via the Palette API
-- Smooth animated transitions between color palettes when the song changes
-- Toggle between dynamic color and a fixed accent color (8 presets)
-- Full Light / Dark / System theme support
-
 ### 🪟 Now Playing
 - Fullscreen player with blurred album art background and glass card UI
 - Liquid-glass mini player with real-time haze/blur effect
 - Album art cross-fade animation on track change
-- Art scales subtly when paused vs. playing
 - Lyrics display (OpenSubsonic structured lyrics)
-- Audio format / bitrate quality badge
+- Audio format / bitrate quality badge (FLAC, MP3, etc.)
 - "Share Now Playing" card (generated image with album art)
 - Sleep timer with live countdown
 
 ### 🏠 Home Screen
-- Fully configurable sections with drag-to-reorder
+- Fully configurable sections with drag-to-reorder, enable/disable, custom titles
 - Album sections: Recently Added, Random, Top Rated, By Genre, By Year, Most Played
 - Artist sections with optional genre filter and sort options
-- Playlist sections
-- **Last.fm Top Artists** and **Top Albums** — cross-referenced with your library for cover art and navigation
-- **Latest Podcast Episodes** section (activatable)
+- **Last.fm Top Artists** and **Top Albums** — cross-referenced with your library for cover art and navigation, configurable time range
+- **Top Tracks** from Last.fm with play count display
+- **Latest Podcast Episodes** section
+
+### 📊 Last.fm Integration
+- Personal play counts on album and artist pages
+- Top Albums, Top Artists, Top Tracks on the home screen — all time, last year, last month, last week
+- Loved track indicators (❤️) in album track lists
+- Love / unlove tracks directly from the fullscreen player
+- Scrobbling via the Subsonic `scrobble` endpoint
+- Configures via Settings with your own API key + session auth
 
 ### 📚 Library
 - Artist detail pages: biography, genre chips, external links (Last.fm, Wikipedia, RateYourMusic), album grid
-- Album detail: compact header, full track list with duration
+- Album detail: compact header, full track list with duration and loved indicators
 - Sort and search in Artists, Albums, and Playlists lists
+- Multi-column list layout option
 - Playlists, starred tracks, search
 
-### 🎙️ Last.fm Integration
-- Personal play counts on album and artist pages
-- Loved track indicators (❤️) in album view track list
-- Love / unlove tracks directly from the fullscreen player
-- Configures via Settings with your own API key + session auth
-
-### 📻 Internet Radio
-- Browse and play internet radio stations from your Navidrome server
-
-### 🎙 Podcasts
+### 🎙️ Podcasts
 - Subscribe to any podcast via RSS feed URL
 - Import/export subscriptions via OPML file
 - Episode list with artwork, date, and duration
 - Stream episodes directly — no downloads needed
 - Latest episodes as an activatable Home section
+
+### 📻 Internet Radio
+- Browse and play internet radio stations from your Navidrome server
 
 ### 🖼 Home Screen Widget
 - Now-playing widget with album art, track info, play/pause and skip controls
