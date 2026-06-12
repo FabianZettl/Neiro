@@ -40,8 +40,6 @@ data class SettingsUiState(
     val dynamicColor: Boolean = true,
     val accentColorHex: String = "#E5484D",
     val lastFmUsername: String = "",
-    val lastFmApiKey: String = "",
-    val lastFmApiSecret: String = "",
     val lastFmPassword: String = "",
     val lastFmSessionKey: String = "",
     val lastFmAuthState: ConnectionState = ConnectionState.Idle,
@@ -74,8 +72,6 @@ class SettingsViewModel @Inject constructor(
                     dynamicColor = prefs.dynamicColor,
                     accentColorHex = prefs.accentColorHex,
                     lastFmUsername = prefs.lastFmUsername,
-                    lastFmApiKey = prefs.lastFmApiKey,
-                    lastFmApiSecret = prefs.lastFmApiSecret,
                     lastFmSessionKey = prefs.lastFmSessionKey,
                     lastFmAuthState = if (prefs.lastFmSessionKey.isNotBlank())
                         ConnectionState.Success("Connected") else ConnectionState.Idle
@@ -126,39 +122,27 @@ class SettingsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(lastFmUsername = value, lastFmAuthState = ConnectionState.Idle)
     }
 
-    fun onLastFmApiKeyChange(value: String) {
-        _uiState.value = _uiState.value.copy(lastFmApiKey = value, lastFmAuthState = ConnectionState.Idle)
-    }
-
-    fun onLastFmApiSecretChange(value: String) {
-        _uiState.value = _uiState.value.copy(lastFmApiSecret = value, lastFmAuthState = ConnectionState.Idle)
-    }
-
     fun onLastFmPasswordChange(value: String) {
         _uiState.value = _uiState.value.copy(lastFmPassword = value, lastFmAuthState = ConnectionState.Idle)
     }
 
     fun connectToLastFm() {
         val state = _uiState.value
-        if (state.lastFmUsername.isBlank() || state.lastFmApiKey.isBlank() ||
-            state.lastFmApiSecret.isBlank() || state.lastFmPassword.isBlank()) {
+        if (state.lastFmUsername.isBlank() || state.lastFmPassword.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                lastFmAuthState = ConnectionState.Error("Fill in username, API key, API secret and password")
+                lastFmAuthState = ConnectionState.Error("Enter your Last.fm username and password")
             )
             return
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(lastFmAuthState = ConnectionState.Testing)
-            // Save credentials first so repository can read them
-            preferences.savePrefs(_uiState.value.toNieroPrefs())
-            val ok = lastFmRepository.authenticate(state.lastFmPassword, state.lastFmApiSecret)
+            val ok = lastFmRepository.authenticate(state.lastFmUsername, state.lastFmPassword)
             _uiState.value = _uiState.value.copy(
-                lastFmPassword = "",  // clear password from UI after auth
+                lastFmPassword = "",
                 lastFmAuthState = if (ok) ConnectionState.Success("Connected to Last.fm")
                                   else ConnectionState.Error("Authentication failed — check credentials")
             )
             if (ok) {
-                // Reload session key into state
                 val prefs = preferences.prefsFlow.first()
                 _uiState.value = _uiState.value.copy(lastFmSessionKey = prefs.lastFmSessionKey)
             }
@@ -183,8 +167,6 @@ class SettingsViewModel @Inject constructor(
         dynamicColor = dynamicColor,
         accentColorHex = accentColorHex,
         lastFmUsername = lastFmUsername,
-        lastFmApiKey = lastFmApiKey,
-        lastFmApiSecret = lastFmApiSecret,
         lastFmSessionKey = lastFmSessionKey
     )
 
@@ -226,8 +208,6 @@ class SettingsViewModel @Inject constructor(
                     dynamicColor = state.dynamicColor,
                     accentColorHex = state.accentColorHex,
                     lastFmUsername = state.lastFmUsername,
-                    lastFmApiKey = state.lastFmApiKey,
-                    lastFmApiSecret = state.lastFmApiSecret,
                     lastFmSessionKey = state.lastFmSessionKey
                 )
             )

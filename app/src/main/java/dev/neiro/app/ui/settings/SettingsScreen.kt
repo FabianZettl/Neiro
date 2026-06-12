@@ -340,23 +340,7 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = state.lastFmUsername,
                 onValueChange = viewModel::onLastFmUsernameChange,
-                label = { Text("Username") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = state.lastFmApiKey,
-                onValueChange = viewModel::onLastFmApiKeyChange,
-                label = { Text("API Key") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = state.lastFmApiSecret,
-                onValueChange = viewModel::onLastFmApiSecretChange,
-                label = { Text("API Secret") },
+                label = { Text("Last.fm Username") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -364,7 +348,7 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = state.lastFmPassword,
                 onValueChange = viewModel::onLastFmPasswordChange,
-                label = { Text("Password") },
+                label = { Text("Last.fm Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

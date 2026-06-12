@@ -1,5 +1,6 @@
 package dev.neiro.app.data.repository
 
+import dev.neiro.app.BuildConfig
 import dev.neiro.app.data.api.LastFmApi
 import dev.neiro.app.data.api.models.LastFmAlbumInfo
 import dev.neiro.app.data.api.models.LastFmArtistInfo
@@ -28,9 +29,13 @@ class LastFmRepository @Inject constructor(
     private val artistInfoCache = MemoryCache<String, LastFmArtistInfo>(ttlMs = 30 * 60_000L)
     private val albumInfoCache  = MemoryCache<String, LastFmAlbumInfo>(ttlMs = 30 * 60_000L)
 
+    // Bundled app-level credentials — users never need to enter these.
+    private val appApiKey    get() = BuildConfig.LASTFM_API_KEY
+    private val appApiSecret get() = BuildConfig.LASTFM_API_SECRET
+
     private suspend fun creds(): Pair<String, String> {
-        val prefs = preferences.prefsFlow.first()
-        return prefs.lastFmUsername to prefs.lastFmApiKey
+        val user = preferences.prefsFlow.first().lastFmUsername
+        return user to appApiKey
     }
 
     fun isConfigured(username: String, apiKey: String) =
@@ -122,34 +127,33 @@ class LastFmRepository @Inject constructor(
         }.getOrElse { emptyList() }
     }
 
-    /** Authenticates with Last.fm using password + API secret, stores the session key. Returns true on success. */
-    suspend fun authenticate(password: String, apiSecret: String): Boolean {
-        val prefs = preferences.prefsFlow.first()
-        val user = prefs.lastFmUsername
-        val key = prefs.lastFmApiKey
-        if (!isConfigured(user, key)) return false
+    /** Authenticates with Last.fm (username + password). Stores the session key. Returns true on success. */
+    suspend fun authenticate(username: String, password: String): Boolean {
+        val key    = appApiKey
+        val secret = appApiSecret
+        if (key.isBlank() || secret.isBlank()) return false
         val sig = computeApiSig(
             mapOf(
-                "api_key" to key,
-                "method" to "auth.getMobileSession",
+                "api_key"  to key,
+                "method"   to "auth.getMobileSession",
                 "password" to password,
-                "username" to user
+                "username" to username
             ),
-            apiSecret
+            secret
         )
         val sessionKey = runCatching {
-            api.getMobileSession(username = user, password = password, apiKey = key, apiSig = sig).session?.key
+            api.getMobileSession(username = username, password = password, apiKey = key, apiSig = sig).session?.key
         }.getOrNull() ?: return false
-        preferences.savePrefs(prefs.copy(lastFmApiSecret = apiSecret, lastFmSessionKey = sessionKey))
+        val prefs = preferences.prefsFlow.first()
+        preferences.savePrefs(prefs.copy(lastFmUsername = username, lastFmSessionKey = sessionKey))
         return true
     }
 
     /** Loves or unloves a track. Returns true on success. */
     suspend fun loveTrack(trackName: String, artistName: String, love: Boolean): Boolean {
-        val prefs = preferences.prefsFlow.first()
-        val key = prefs.lastFmApiKey
-        val secret = prefs.lastFmApiSecret
-        val sk = prefs.lastFmSessionKey
+        val key    = appApiKey
+        val secret = appApiSecret
+        val sk     = preferences.prefsFlow.first().lastFmSessionKey
         if (key.isBlank() || secret.isBlank() || sk.isBlank()) return false
         val method = if (love) "track.love" else "track.unlove"
         val sig = computeApiSig(
