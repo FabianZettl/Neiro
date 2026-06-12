@@ -27,6 +27,10 @@ class MusicRepository @Inject constructor(
     private val api: SubsonicApi,
     private val preferences: NieroPreferences
 ) {
+    private val albumCache = MemoryCache<String, AlbumDto>(ttlMs = 5 * 60_000L)
+    private val artistCache = MemoryCache<String, ArtistWithAlbumsDto>(ttlMs = 5 * 60_000L)
+    private val allArtistsCache = MemoryCache<Unit, List<ArtistDto>>(ttlMs = 5 * 60_000L)
+
 
     suspend fun getAlbumsByFilter(config: HomeSectionConfig): List<AlbumDto> {
         val prefs = preferences.prefsFlow.first()
@@ -121,13 +125,14 @@ class MusicRepository @Inject constructor(
     }
 
     suspend fun getArtist(id: String): ArtistWithAlbumsDto {
+        artistCache.get(id)?.let { return it }
         val prefs = preferences.prefsFlow.first()
         val artist = api.getArtist(id).response.artist
         return artist.copy(
             album = artist.album.orEmpty().map { album ->
                 album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
             }
-        )
+        ).also { artistCache.put(id, it) }
     }
 
     suspend fun getArtistInfo(artistId: String): ArtistInfoDto {
@@ -147,6 +152,7 @@ class MusicRepository @Inject constructor(
     }
 
     suspend fun getAllArtists(): List<ArtistDto> {
+        allArtistsCache.get(Unit)?.let { return it }
         val prefs = preferences.prefsFlow.first()
         return api.getArtists().response.artists.index.flatMap { it.artist }.map { entry ->
             ArtistDto(
@@ -156,10 +162,11 @@ class MusicRepository @Inject constructor(
                 coverArt = entry.coverArt,
                 coverArtUrl = entry.coverArt?.let { buildCoverArtUrl(prefs, it, size = 200) }
             )
-        }
+        }.also { allArtistsCache.put(Unit, it) }
     }
 
     suspend fun getAlbum(id: String): AlbumDto {
+        albumCache.get(id)?.let { return it }
         val prefs = preferences.prefsFlow.first()
         val result = api.getAlbum(id)
         val album = result.response.album
@@ -169,7 +176,7 @@ class MusicRepository @Inject constructor(
         return album.copy(
             coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) },
             song = songs
-        )
+        ).also { albumCache.put(id, it) }
     }
 
     suspend fun search(query: String): SearchResult3Dto {

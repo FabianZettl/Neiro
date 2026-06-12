@@ -46,6 +46,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,7 +67,10 @@ import dev.neiro.app.ui.theme.ThemeViewModel
 import dev.neiro.app.ui.theme.extractPalette
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +98,7 @@ fun AlbumScreen(
     val lastFm = state.lastFmInfo
     val lovedKeys = state.lovedTrackKeys
     val playlists by playlistActionViewModel.playlists.collectAsStateWithLifecycle()
+    val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle()
@@ -284,10 +294,13 @@ fun AlbumScreen(
                         val isLoved = lovedKeys.contains(
                             "${song.title.lowercase()}_${(song.artist ?: "").lowercase()}"
                         )
+                        val isCurrentSong = playerState.currentSong?.id == song.id
                         TrackRow(
                             song = song,
                             trackNumber = song.track ?: (index + 1),
                             isLoved = isLoved,
+                            isCurrentSong = isCurrentSong,
+                            isPlaying = isCurrentSong && playerState.isPlaying,
                             onClick = { viewModel.playTrackAtIndex(index) },
                             onPlayNext = { playerViewModel.playNext(song) },
                             onAddToQueue = { playerViewModel.addToQueue(song) },
@@ -320,6 +333,8 @@ private fun TrackRow(
     song: SongDto,
     trackNumber: Int,
     isLoved: Boolean = false,
+    isCurrentSong: Boolean = false,
+    isPlaying: Boolean = false,
     onClick: () -> Unit,
     onPlayNext: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
@@ -337,13 +352,27 @@ private fun TrackRow(
             .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Track number
-        Text(
-            text = trackNumber.toString(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(28.dp)
-        )
+        // Track number / now-playing indicator
+        Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) {
+            if (isCurrentSong) {
+                if (isPlaying) {
+                    EqualizerBars(color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = trackNumber.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         // Title + artist
         Column(modifier = Modifier.weight(1f)) {
@@ -439,4 +468,34 @@ private fun formatPlayCount(count: Long): String = when {
     count >= 1_000_000 -> "%.1fM".format(count / 1_000_000.0)
     count >= 1_000 -> "%.1fK".format(count / 1_000.0)
     else -> count.toString()
+}
+
+@Composable
+private fun EqualizerBars(color: Color, barWidth: Dp = 2.5.dp, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "eq")
+    val delays = listOf(0, 200, 100)
+    val heights = delays.map { delay ->
+        transition.animateFloat(
+            initialValue = 0.2f, targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 400, delayMillis = delay, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar"
+        )
+    }
+    Canvas(modifier = modifier.size(width = 14.dp, height = 14.dp)) {
+        val totalWidth = size.width
+        val barPx = barWidth.toPx()
+        val gap = (totalWidth - 3 * barPx) / 2
+        heights.forEachIndexed { i, h ->
+            val barHeight = size.height * h.value
+            val x = i * (barPx + gap)
+            drawRect(
+                color = color,
+                topLeft = Offset(x, size.height - barHeight),
+                size = androidx.compose.ui.geometry.Size(barPx, barHeight)
+            )
+        }
+    }
 }

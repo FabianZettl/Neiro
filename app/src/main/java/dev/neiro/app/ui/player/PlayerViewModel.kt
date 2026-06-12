@@ -98,7 +98,9 @@ class PlayerViewModel @Inject constructor(
         _lastFmState.value = _lastFmState.value.copy(isLoved = !currentLoved)
         viewModelScope.launch {
             val ok = lastFmRepository.loveTrack(song.title, artistName, !currentLoved)
-            if (!ok) {
+            if (ok) {
+                lastFmRepository.invalidateLovedTracks()
+            } else {
                 // Revert on failure
                 _lastFmState.value = _lastFmState.value.copy(isLoved = currentLoved)
             }

@@ -1,5 +1,7 @@
 package dev.neiro.app.player
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -11,6 +13,7 @@ import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
+import dev.neiro.app.MainActivity
 
 @UnstableApi
 @AndroidEntryPoint
@@ -36,9 +39,18 @@ class NieroMediaService : MediaSessionService() {
 
         NieroPlayerHolder.player = player
 
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val sessionActivity = PendingIntent.getActivity(
+            this, 0, openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         // CoilBitmapLoader loads album art (incl. authenticated URLs) for the notification
         mediaSession = MediaSession.Builder(this, player)
             .setBitmapLoader(CoilBitmapLoader(this))
+            .setSessionActivity(sessionActivity)
             .build()
 
         // Colorized notification: system extracts palette from album art on Android 12+

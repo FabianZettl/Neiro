@@ -21,6 +21,13 @@ class LastFmRepository @Inject constructor(
     private val api: LastFmApi,
     private val preferences: NieroPreferences
 ) {
+    private val topArtistsCache = MemoryCache<String, LastFmTopArtistsResponse>(ttlMs = 15 * 60_000L)
+    private val topAlbumsCache  = MemoryCache<String, LastFmTopAlbumsResponse>(ttlMs = 15 * 60_000L)
+    private val topTracksCache  = MemoryCache<String, LastFmTopTracksResponse>(ttlMs = 15 * 60_000L)
+    private val lovedTracksCache = MemoryCache<Unit, Set<String>>(ttlMs = 5 * 60_000L)
+    private val artistInfoCache = MemoryCache<String, LastFmArtistInfo>(ttlMs = 30 * 60_000L)
+    private val albumInfoCache  = MemoryCache<String, LastFmAlbumInfo>(ttlMs = 30 * 60_000L)
+
     private suspend fun creds(): Pair<String, String> {
         val prefs = preferences.prefsFlow.first()
         return prefs.lastFmUsername to prefs.lastFmApiKey
@@ -30,40 +37,49 @@ class LastFmRepository @Inject constructor(
         username.isNotBlank() && apiKey.isNotBlank()
 
     suspend fun getTopArtists(period: String, limit: Int = 20): LastFmTopArtistsResponse? {
+        val cacheKey = "$period:$limit"
+        topArtistsCache.get(cacheKey)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching { api.getTopArtists(user = user, period = period, limit = limit, apiKey = key) }
-            .getOrNull()
+            .getOrNull()?.also { topArtistsCache.put(cacheKey, it) }
     }
 
     suspend fun getTopTracks(period: String, limit: Int = 20): LastFmTopTracksResponse? {
+        val cacheKey = "$period:$limit"
+        topTracksCache.get(cacheKey)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching { api.getTopTracks(user = user, apiKey = key, period = period, limit = limit) }
-            .getOrNull()
+            .getOrNull()?.also { topTracksCache.put(cacheKey, it) }
     }
 
     suspend fun getTopAlbums(period: String, limit: Int = 20): LastFmTopAlbumsResponse? {
+        val cacheKey = "$period:$limit"
+        topAlbumsCache.get(cacheKey)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching { api.getTopAlbums(user = user, period = period, limit = limit, apiKey = key) }
-            .getOrNull()
+            .getOrNull()?.also { topAlbumsCache.put(cacheKey, it) }
     }
 
     suspend fun getArtistInfo(artistName: String): LastFmArtistInfo? {
+        artistInfoCache.get(artistName)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching {
             api.getArtistInfo(artist = artistName, username = user, apiKey = key).artist
-        }.getOrNull()
+        }.getOrNull()?.also { artistInfoCache.put(artistName, it) }
     }
 
     suspend fun getAlbumInfo(artistName: String, albumName: String): LastFmAlbumInfo? {
+        val cacheKey = "$artistName::$albumName"
+        albumInfoCache.get(cacheKey)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return null
         return runCatching {
             api.getAlbumInfo(artist = artistName, album = albumName, username = user, apiKey = key).album
-        }.getOrNull()
+        }.getOrNull()?.also { albumInfoCache.put(cacheKey, it) }
     }
 
     suspend fun getUserInfo(): LastFmUserInfo? {
@@ -82,6 +98,7 @@ class LastFmRepository @Inject constructor(
 
     /** Returns a set of "trackname_artistname" (lowercase) for the user's loved tracks. */
     suspend fun getLovedTracks(limit: Int = 200): Set<String> {
+        lovedTracksCache.get(Unit)?.let { return it }
         val (user, key) = creds()
         if (!isConfigured(user, key)) return emptySet()
         return runCatching {
@@ -89,8 +106,11 @@ class LastFmRepository @Inject constructor(
                 .lovedTracks?.tracks.orEmpty()
                 .map { "${it.name.lowercase()}_${it.artist.name.lowercase()}" }
                 .toSet()
-        }.getOrElse { emptySet() }
+        }.getOrElse { emptySet() }.also { lovedTracksCache.put(Unit, it) }
     }
+
+    /** Call after loving/unloving a track so the cache reflects the new state. */
+    fun invalidateLovedTracks() = lovedTracksCache.invalidate(Unit)
 
     /** Returns the full loved track list (with image URLs) for display. */
     suspend fun getLovedTracksFull(limit: Int = 500): List<LastFmLovedTrack> {
