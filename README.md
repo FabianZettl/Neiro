@@ -66,17 +66,18 @@
 
 ### 📊 Last.fm Integration
 - Personal play counts on album and artist pages
+- **Top 10 most-played tracks per artist** — pulled from your own scrobble history, tappable to play
 - Top Albums, Top Artists, Top Tracks on the home screen — all time, last year, last month, last week
 - Loved track indicators (❤️) in album track lists
 - Love / unlove tracks directly from the fullscreen player
 - Scrobbling via the Subsonic `scrobble` endpoint
-- Configures via Settings with your own API key + session auth
+- Simple login: just username + password — no API key required
 
 ### 📚 Library
 - Artist detail pages: biography, genre chips, external links (Last.fm, Wikipedia, RateYourMusic), album grid
 - Album detail: compact header, full track list with duration and loved indicators
 - Sort and search in Artists, Albums, and Playlists lists
-- Multi-column list layout option
+- **Multiple view modes** for Albums and Artists: 2-column grid, 3-column grid, list view
 - Playlists, starred tracks, search
 
 ### 🎙️ Podcasts
@@ -120,7 +121,29 @@ Requires Android SDK with min SDK 26, target SDK 35.
 
 ## 📋 Changelog
 
-### v0.2.0-alpha *(2025-06-11)*
+### v0.3.0-alpha *(2026-06-12)*
+
+**New features**
+- Artist pages: Top 10 most-played tracks from your personal Last.fm scrobbles — tap to play immediately
+- Album and Artist list screens: toggle between 2-column grid, 3-column grid, and list view
+- Settings: About section with version number, GitHub link, and privacy note
+- Simplified Last.fm login — username + password only, no API key needed
+
+**Performance**
+- Home screen now loads progressively — sections appear as they finish instead of waiting for all
+- Shimmer skeleton placeholders shown while each section loads
+- Memory caches for albums, artists, songs, Last.fm data, and podcast feeds (5–30 min TTL)
+- Track matching capped at 5 concurrent requests to avoid overwhelming the server
+- Podcast feeds cached 20 minutes (was re-fetched on every tab switch)
+
+**Bug fixes**
+- Last.fm home sections were not loading after the login simplification (wrong credential check)
+- Notification tap now correctly opens the app
+- Now-playing indicator with animated equalizer bars in album track list
+- Artist top tracks now uses `artist.getTopTracks` + per-track `track.getInfo` — works reliably even for artists you've only played a few times
+- "About" and "Links" headings on artist pages were unreadable in dark mode
+
+### v0.2.0-alpha *(2026-06-11)*
 
 **New features**
 - Podcast support: subscribe via RSS URL, import via OPML, episode streaming, Latest Episodes home section
@@ -150,7 +173,7 @@ Requires Android SDK with min SDK 26, target SDK 35.
 **Removed**
 - Chromecast support (removed for stability; may return in a future release)
 
-### v0.1.0-alpha *(2025-06-09)*
+### v0.1.0-alpha *(2026-06-09)*
 - Initial public pre-release
 - Dynamic album-art color theming with animated transitions
 - Fullscreen player with blurred background and glass card
