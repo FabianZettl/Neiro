@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -126,7 +126,7 @@ fun LibraryScreen(
                 )
                 RowDivider()
                 LibraryRow(
-                    icon = Icons.Default.PlaylistPlay,
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
                     iconTint = Color(0xFF30D158),
                     label = "Playlists",
                     onClick = { navController.navigate("playlists_list") }

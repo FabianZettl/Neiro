@@ -10,6 +10,7 @@ import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.data.repository.PodcastRepository
 import dev.neiro.app.player.PlayerController
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 sealed class HomeError {
@@ -29,7 +34,8 @@ sealed class HomeError {
 
 data class SectionContent(
     val config: HomeSectionConfig,
-    val items: SectionItems = SectionItems.Albums(emptyList())
+    val items: SectionItems = SectionItems.Albums(emptyList()),
+    val isLoading: Boolean = true
 )
 
 data class HomeUiState(
@@ -130,142 +136,174 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun loadSections(configs: List<HomeSectionConfig>) {
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-        try {
-            val hasLastFm = lastFmRepository.isStatsConfigured()
-            val enabledConfigs = configs.filter { it.enabled }
-            coroutineScope {
-                val sections = enabledConfigs.map { config ->
-                    async {
-                        // Use LastFM when the session is configured AND the sort type
-                        // has a meaningful LastFM equivalent (play/scrobble stats).
-                        // Sort type IS the signal — no separate DataSource picker needed.
-                        val useLastFm = hasLastFm && when (config.contentType) {
-                            SectionContentType.ALBUMS ->
-                                config.sortType == AlbumSortType.MOST_PLAYED ||
-                                config.dataSource == DataSource.LASTFM
-                            SectionContentType.ARTISTS ->
-                                config.artistSortType == ArtistSortType.MOST_PLAYED ||
-                                config.dataSource == DataSource.LASTFM
-                            SectionContentType.TRACKS -> true
-                            SectionContentType.LOVED_TRACKS -> true
-                            else -> false
-                        }
+        val hasLastFm = lastFmRepository.isStatsConfigured()
+        val enabledConfigs = configs.filter { it.enabled }
 
-                        val items: SectionItems = when (config.contentType) {
-                            SectionContentType.ALBUMS -> {
-                                if (useLastFm) {
-                                    val lfmAlbums = lastFmRepository
-                                        .getTopAlbums(config.lastFmPeriod.apiValue, config.size * 3)
-                                        ?.topAlbums?.albums.orEmpty()
-                                    val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
-                                    val matched = lfmAlbums.mapNotNull { lfm ->
-                                        val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
-                                            ?: return@mapNotNull null
-                                        LastFmMatchedAlbum(
-                                            name = lfm.name, artistName = lfm.artist.name,
-                                            playCount = lfm.playCountInt,
-                                            subsonicId = sub.id,
-                                            coverArtUrl = sub.coverArtUrl ?: lfm.imageUrl
-                                        )
-                                    }.take(config.size)
-                                    SectionItems.LastFmTopAlbums(matched)
-                                } else {
-                                    SectionItems.Albums(runCatching { musicRepository.getAlbumsByFilter(config) }.getOrElse { emptyList() })
-                                }
-                            }
-                            SectionContentType.ARTISTS -> {
-                                if (useLastFm) {
-                                    val lfmArtists = lastFmRepository
-                                        .getTopArtists(config.lastFmPeriod.apiValue, config.size * 3)
-                                        ?.topArtists?.artists.orEmpty()
-                                    val subsonicArtists = runCatching { musicRepository.getAllArtists() }.getOrElse { emptyList() }
-                                    val artistMap = subsonicArtists.associateBy { it.name.lowercase() }
-                                    val matched = lfmArtists.mapNotNull { lfm ->
-                                        val sub = artistMap[lfm.name.lowercase()]
-                                            ?: return@mapNotNull null
-                                        LastFmMatchedArtist(name = lfm.name, playCount = lfm.playCountInt, subsonicId = sub.id, coverArtUrl = sub.coverArtUrl)
-                                    }.take(config.size)
-                                    SectionItems.LastFmTopArtists(matched)
-                                } else {
-                                    val artists = runCatching {
-                                        var list = musicRepository.getAllArtists()
-                                        if (!config.artistGenre.isNullOrBlank()) {
-                                            val ids = musicRepository.getArtistIdsByGenre(config.artistGenre)
-                                            list = list.filter { it.id in ids }
-                                        }
-                                        list = when (config.artistSortType) {
-                                            ArtistSortType.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
-                                            ArtistSortType.ALBUM_COUNT  -> list.sortedByDescending { it.albumCount }
-                                            ArtistSortType.RANDOM       -> list.shuffled()
-                                            else -> list
-                                        }
-                                        list.take(config.size)
-                                    }.getOrElse { emptyList() }
-                                    SectionItems.Artists(artists)
-                                }
-                            }
-                            SectionContentType.PLAYLISTS -> {
-                                SectionItems.Playlists(runCatching { musicRepository.getPlaylists() }.getOrElse { emptyList() })
-                            }
-                            SectionContentType.TRACKS -> {
-                                if (useLastFm) {
-                                    val lfmTracks = lastFmRepository
-                                        .getTopTracks(config.lastFmPeriod.apiValue, config.size * 3)
-                                        ?.topTracks?.tracks.orEmpty()
-                                    val matched = lfmTracks.mapNotNull { lfm ->
-                                        val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
-                                        val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
-                                            ?: return@mapNotNull null
-                                        LastFmMatchedTrack(
-                                            name = lfm.name, artistName = lfm.artist.name,
-                                            playCount = lfm.playCountLong,
-                                            subsonicId = best.id,
-                                            albumId = best.albumId,
-                                            coverArtUrl = best.coverArtUrl
-                                        )
-                                    }.take(config.size)
-                                    SectionItems.LastFmTopTracks(matched)
-                                } else {
-                                    SectionItems.LastFmTopTracks(emptyList())
-                                }
-                            }
-                            SectionContentType.LOVED_TRACKS -> {
-                                if (hasLastFm) {
-                                    val lovedTracks = lastFmRepository.getLovedTracksFull(200)
-                                    val matched = lovedTracks.map { lfm ->
-                                        val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
-                                        val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
-                                        LastFmMatchedTrack(
-                                            name = lfm.name, artistName = lfm.artist.name,
-                                            playCount = 0L,
-                                            subsonicId = best?.id,
-                                            albumId = best?.albumId,
-                                            coverArtUrl = best?.coverArtUrl ?: lfm.imageUrl
-                                        )
-                                    }
-                                    SectionItems.LastFmTopTracks(matched.filter { it.subsonicId != null })
-                                } else {
-                                    SectionItems.LastFmTopTracks(emptyList())
-                                }
-                            }
-                            SectionContentType.GENRES -> {
-                                SectionItems.Genres(runCatching { musicRepository.getGenres() }.getOrElse { emptyList() })
-                            }
-                            SectionContentType.PODCASTS -> {
-                                SectionItems.Podcasts(runCatching { podcastRepository.getLatestEpisodes(config.size) }.getOrElse { emptyList() })
+        // Show empty placeholders immediately — sections fill in as they load
+        val placeholders = enabledConfigs.map { SectionContent(it) }
+        _uiState.value = HomeUiState(sections = placeholders, isLoading = true, error = null)
+
+        val mutex = Mutex()
+        try {
+            coroutineScope {
+                enabledConfigs.forEachIndexed { index, config ->
+                    launch {
+                        val items = runCatching {
+                            fetchSectionItems(config, hasLastFm)
+                        }.getOrElse { SectionItems.Albums(emptyList()) }
+                        mutex.withLock {
+                            val updated = _uiState.value.sections.toMutableList()
+                            if (index < updated.size) {
+                                updated[index] = SectionContent(config, items, isLoading = false)
+                                _uiState.value = _uiState.value.copy(sections = updated)
                             }
                         }
-                        SectionContent(config, items)
                     }
-                }.map { it.await() }
-                _uiState.value = HomeUiState(sections = sections, isLoading = false)
+                }
             }
         } catch (e: Exception) {
             _uiState.value = HomeUiState(
                 isLoading = false,
                 error = HomeError.ApiError(e.message ?: e.javaClass.simpleName)
             )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = false)
+    }
+
+    private suspend fun fetchSectionItems(config: HomeSectionConfig, hasLastFm: Boolean): SectionItems {
+        val useLastFm = hasLastFm && when (config.contentType) {
+            SectionContentType.ALBUMS ->
+                config.sortType == AlbumSortType.MOST_PLAYED ||
+                config.dataSource == DataSource.LASTFM
+            SectionContentType.ARTISTS ->
+                config.artistSortType == ArtistSortType.MOST_PLAYED ||
+                config.dataSource == DataSource.LASTFM
+            SectionContentType.TRACKS -> true
+            SectionContentType.LOVED_TRACKS -> true
+            else -> false
+        }
+
+        return when (config.contentType) {
+            SectionContentType.ALBUMS -> {
+                if (useLastFm) {
+                    val lfmAlbums = lastFmRepository
+                        .getTopAlbums(config.lastFmPeriod.apiValue, config.size * 3)
+                        ?.topAlbums?.albums.orEmpty()
+                    val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
+                    val matched = lfmAlbums.mapNotNull { lfm ->
+                        val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
+                            ?: return@mapNotNull null
+                        LastFmMatchedAlbum(
+                            name = lfm.name, artistName = lfm.artist.name,
+                            playCount = lfm.playCountInt,
+                            subsonicId = sub.id,
+                            coverArtUrl = sub.coverArtUrl ?: lfm.imageUrl
+                        )
+                    }.take(config.size)
+                    SectionItems.LastFmTopAlbums(matched)
+                } else {
+                    SectionItems.Albums(runCatching { musicRepository.getAlbumsByFilter(config) }.getOrElse { emptyList() })
+                }
+            }
+            SectionContentType.ARTISTS -> {
+                if (useLastFm) {
+                    val lfmArtists = lastFmRepository
+                        .getTopArtists(config.lastFmPeriod.apiValue, config.size * 3)
+                        ?.topArtists?.artists.orEmpty()
+                    val subsonicArtists = runCatching { musicRepository.getAllArtists() }.getOrElse { emptyList() }
+                    val artistMap = subsonicArtists.associateBy { it.name.lowercase() }
+                    val matched = lfmArtists.mapNotNull { lfm ->
+                        val sub = artistMap[lfm.name.lowercase()]
+                            ?: return@mapNotNull null
+                        LastFmMatchedArtist(name = lfm.name, playCount = lfm.playCountInt, subsonicId = sub.id, coverArtUrl = sub.coverArtUrl)
+                    }.take(config.size)
+                    SectionItems.LastFmTopArtists(matched)
+                } else {
+                    val artists = runCatching {
+                        var list = musicRepository.getAllArtists()
+                        if (!config.artistGenre.isNullOrBlank()) {
+                            val ids = musicRepository.getArtistIdsByGenre(config.artistGenre)
+                            list = list.filter { it.id in ids }
+                        }
+                        list = when (config.artistSortType) {
+                            ArtistSortType.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
+                            ArtistSortType.ALBUM_COUNT  -> list.sortedByDescending { it.albumCount }
+                            ArtistSortType.RANDOM       -> list.shuffled()
+                            else -> list
+                        }
+                        list.take(config.size)
+                    }.getOrElse { emptyList() }
+                    SectionItems.Artists(artists)
+                }
+            }
+            SectionContentType.PLAYLISTS -> {
+                SectionItems.Playlists(runCatching { musicRepository.getPlaylists() }.getOrElse { emptyList() })
+            }
+            SectionContentType.TRACKS -> {
+                if (useLastFm) {
+                    val lfmTracks = lastFmRepository
+                        .getTopTracks(config.lastFmPeriod.apiValue, config.size * 3)
+                        ?.topTracks?.tracks.orEmpty()
+                        .take(config.size * 2)
+                    // Parallel search, max 5 concurrent requests to avoid server overload
+                    val semaphore = Semaphore(5)
+                    val matched = coroutineScope {
+                        lfmTracks.map { lfm ->
+                            async {
+                                semaphore.withPermit {
+                                    val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
+                                    val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
+                                        ?: return@withPermit null
+                                    LastFmMatchedTrack(
+                                        name = lfm.name, artistName = lfm.artist.name,
+                                        playCount = lfm.playCountLong,
+                                        subsonicId = best.id,
+                                        albumId = best.albumId,
+                                        coverArtUrl = best.coverArtUrl
+                                    )
+                                }
+                            }
+                        }.awaitAll().filterNotNull().take(config.size)
+                    }
+                    SectionItems.LastFmTopTracks(matched)
+                } else {
+                    SectionItems.LastFmTopTracks(emptyList())
+                }
+            }
+            SectionContentType.LOVED_TRACKS -> {
+                if (hasLastFm) {
+                    val lovedTracks = lastFmRepository.getLovedTracksFull(50)
+                    // Parallel search, max 5 concurrent requests to avoid server overload
+                    val semaphore = Semaphore(5)
+                    val matched = coroutineScope {
+                        lovedTracks.map { lfm ->
+                            async {
+                                semaphore.withPermit {
+                                    val songs = runCatching { musicRepository.searchSongs(lfm.name, lfm.artist.name) }.getOrElse { emptyList() }
+                                    val best = songs.firstOrNull { it.title.equals(lfm.name, ignoreCase = true) } ?: songs.firstOrNull()
+                                    LastFmMatchedTrack(
+                                        name = lfm.name, artistName = lfm.artist.name,
+                                        playCount = 0L,
+                                        subsonicId = best?.id,
+                                        albumId = best?.albumId,
+                                        coverArtUrl = best?.coverArtUrl ?: lfm.imageUrl
+                                    )
+                                }
+                            }
+                        }.awaitAll().filter { it.subsonicId != null }
+                    }
+                    SectionItems.LastFmTopTracks(matched)
+                } else {
+                    SectionItems.LastFmTopTracks(emptyList())
+                }
+            }
+            SectionContentType.GENRES -> {
+                SectionItems.Genres(runCatching { musicRepository.getGenres() }.getOrElse { emptyList() })
+            }
+            SectionContentType.PODCASTS -> {
+                SectionItems.Podcasts(runCatching { podcastRepository.getLatestEpisodes(config.size) }.getOrElse { emptyList() })
+            }
         }
     }
 

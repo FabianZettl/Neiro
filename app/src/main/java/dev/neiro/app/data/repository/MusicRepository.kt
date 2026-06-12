@@ -28,8 +28,10 @@ class MusicRepository @Inject constructor(
     private val preferences: NieroPreferences
 ) {
     private val albumCache = MemoryCache<String, AlbumDto>(ttlMs = 5 * 60_000L)
+    private val albumsByTypeCache = MemoryCache<String, List<AlbumDto>>(ttlMs = 5 * 60_000L)
     private val artistCache = MemoryCache<String, ArtistWithAlbumsDto>(ttlMs = 5 * 60_000L)
     private val allArtistsCache = MemoryCache<Unit, List<ArtistDto>>(ttlMs = 5 * 60_000L)
+    private val searchSongsCache = MemoryCache<String, List<SongDto>>(ttlMs = 5 * 60_000L)
 
 
     suspend fun getAlbumsByFilter(config: HomeSectionConfig): List<AlbumDto> {
@@ -86,11 +88,13 @@ class MusicRepository @Inject constructor(
     }
 
     suspend fun getAlbumsByType(type: String, size: Int = 20): List<AlbumDto> {
+        val cacheKey = "$type:$size"
+        albumsByTypeCache.get(cacheKey)?.let { return it }
         val prefs = preferences.prefsFlow.first()
         val result = api.getAlbumList2(type = type, size = size)
         return result.response.albumList2?.album.orEmpty().map { album ->
             album.copy(coverArtUrl = album.coverArt?.let { buildCoverArtUrl(prefs, it) })
-        }
+        }.also { albumsByTypeCache.put(cacheKey, it) }
     }
 
     suspend fun getRecentAlbums(size: Int = 20): List<AlbumDto> {
@@ -200,13 +204,16 @@ class MusicRepository @Inject constructor(
             .map { GenreItem(it.value, it.songCount, it.albumCount) }
     }.getOrElse { emptyList() }
 
-    suspend fun searchSongs(query: String, artistQuery: String = ""): List<SongDto> = runCatching {
-        val prefs = preferences.prefsFlow.first()
+    suspend fun searchSongs(query: String, artistQuery: String = ""): List<SongDto> {
         val q = if (artistQuery.isNotBlank()) "$query $artistQuery" else query
-        api.search3(q, songCount = 5, albumCount = 0, artistCount = 0)
-            .response.searchResult3.song
-            .map { song -> song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) }) }
-    }.getOrElse { emptyList() }
+        searchSongsCache.get(q)?.let { return it }
+        return runCatching {
+            val prefs = preferences.prefsFlow.first()
+            api.search3(q, songCount = 5, albumCount = 0, artistCount = 0)
+                .response.searchResult3.song
+                .map { song -> song.copy(coverArtUrl = song.coverArt?.let { buildCoverArtUrl(prefs, it) }) }
+        }.getOrElse { emptyList() }.also { searchSongsCache.put(q, it) }
+    }
 
     suspend fun getSimilarSongs(songId: String, count: Int = 20): List<SongDto> = runCatching {
         val prefs = preferences.prefsFlow.first()

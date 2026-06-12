@@ -24,7 +24,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
@@ -243,7 +243,7 @@ private fun NieroDrawerSheet(
             DrawerItem(Icons.Default.Audiotrack,   "Recently Added",  "albums_list?albumType=newest",               currentRoute, onNavigate, palette)
             DrawerItem(Icons.Default.Person,       "Artists",         "artists_list",                               currentRoute, onNavigate, palette)
             DrawerItem(Icons.Default.Album,        "Albums",          "albums_list?albumType=alphabeticalByName",   currentRoute, onNavigate, palette)
-            DrawerItem(Icons.Default.PlaylistPlay, "Playlists",       "playlists_list", currentRoute, onNavigate, palette)
+            DrawerItem(Icons.AutoMirrored.Filled.PlaylistPlay, "Playlists",       "playlists_list", currentRoute, onNavigate, palette)
             DrawerItem(Icons.Default.Favorite,     "Starred",         "starred",        currentRoute, onNavigate, palette)
             DrawerItem(Icons.Default.Radio,        "Internet Radio",  "radio",          currentRoute, onNavigate, palette)
             DrawerItem(Icons.Default.Podcasts,     "Podcasts",        "podcasts",       currentRoute, onNavigate, palette)

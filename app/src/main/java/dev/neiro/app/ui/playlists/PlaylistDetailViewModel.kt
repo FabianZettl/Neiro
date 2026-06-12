@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.neiro.app.data.api.models.PlaylistDto
 import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.player.PlayerController
+import dev.neiro.app.player.playQueue
+import dev.neiro.app.player.playShuffled
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,19 +51,12 @@ class PlaylistDetailViewModel @Inject constructor(
 
     fun playAll(startIndex: Int = 0) {
         val songs = _uiState.value.playlist?.entry ?: return
-        if (songs.isEmpty()) return
-        viewModelScope.launch {
-            playerController.playTrack(songs[startIndex], songs, startIndex)
-        }
+        viewModelScope.launch { playerController.playQueue(songs, startIndex) }
     }
 
     fun shufflePlay() {
         val songs = _uiState.value.playlist?.entry ?: return
-        if (songs.isEmpty()) return
-        val shuffled = songs.shuffled()
-        viewModelScope.launch {
-            playerController.playTrack(shuffled.first(), shuffled, 0)
-        }
+        viewModelScope.launch { playerController.playShuffled(songs) }
     }
 
     fun removeSong(songIndex: Int) {

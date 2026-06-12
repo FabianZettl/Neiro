@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class AlbumViewMode { GRID_2, GRID_3, LIST }
+
 enum class AlbumSortOption(val label: String) {
     DEFAULT("Default"),
     NAME_ASC("Name A→Z"),
@@ -41,6 +43,7 @@ class AlbumsListViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
     val sortOption = MutableStateFlow(AlbumSortOption.DEFAULT)
+    val viewMode   = MutableStateFlow(AlbumViewMode.GRID_2)
     val searchQuery = MutableStateFlow("")
 
     val uiState: StateFlow<AlbumsListUiState> = combine(

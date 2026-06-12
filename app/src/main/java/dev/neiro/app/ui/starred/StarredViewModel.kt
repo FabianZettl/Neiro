@@ -7,6 +7,7 @@ import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.repository.LastFmRepository
 import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.player.PlayerController
+import dev.neiro.app.player.playQueue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,17 +94,16 @@ class StarredViewModel @Inject constructor(
         val songId = track.subsonicId ?: return
         viewModelScope.launch {
             val albumId = track.albumId
-            if (albumId != null) {
-                val songs = runCatching { musicRepository.getAlbum(albumId).song }.getOrElse { emptyList() }
-                val index = songs.indexOfFirst { it.id == songId }.coerceAtLeast(0)
-                if (songs.isNotEmpty()) {
-                    playerController.playTrack(songs[index], songs, index)
-                    return@launch
-                }
+            val songs = if (albumId != null)
+                runCatching { musicRepository.getAlbum(albumId).song }.getOrElse { emptyList() }
+            else emptyList()
+            if (songs.isNotEmpty()) {
+                playerController.playQueue(songs, songs.indexOfFirst { it.id == songId }.coerceAtLeast(0))
+            } else {
+                val song = SongDto(id = songId, title = track.name, artist = track.artistName,
+                    coverArtUrl = track.coverArtUrl, duration = 0)
+                playerController.playQueue(listOf(song))
             }
-            val song = SongDto(id = songId, title = track.name, artist = track.artistName,
-                coverArtUrl = track.coverArtUrl, duration = 0)
-            playerController.playTrack(song, listOf(song), 0)
         }
     }
 }

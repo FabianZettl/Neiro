@@ -76,6 +76,15 @@ interface LastFmApi {
     ): LastFmUserInfoResponse
 
     @GET(".")
+    suspend fun getArtistTopTracks(
+        @Query("method") method: String = "artist.getTopTracks",
+        @Query("artist") artist: String,
+        @Query("api_key") apiKey: String,
+        @Query("limit") limit: Int = 30,
+        @Query("format") format: String = "json"
+    ): LastFmTopTracksResponse
+
+    @GET(".")
     suspend fun getTrackInfo(
         @Query("method") method: String = "track.getInfo",
         @Query("track") track: String,

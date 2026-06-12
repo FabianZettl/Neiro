@@ -21,7 +21,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TableRows
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,6 +72,7 @@ fun AlbumsListScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var showSearch by remember { mutableStateOf(false) }
@@ -99,6 +110,22 @@ fun AlbumsListScreen(
                     Icon(
                         if (showSearch) Icons.Default.Close else Icons.Default.Search,
                         contentDescription = if (showSearch) "Close search" else "Search"
+                    )
+                }
+                IconButton(onClick = {
+                    viewModel.viewMode.value = when (viewMode) {
+                        AlbumViewMode.GRID_2 -> AlbumViewMode.GRID_3
+                        AlbumViewMode.GRID_3 -> AlbumViewMode.LIST
+                        AlbumViewMode.LIST   -> AlbumViewMode.GRID_2
+                    }
+                }) {
+                    Icon(
+                        when (viewMode) {
+                            AlbumViewMode.GRID_2 -> Icons.Default.GridView
+                            AlbumViewMode.GRID_3 -> Icons.Default.TableRows
+                            AlbumViewMode.LIST   -> Icons.AutoMirrored.Filled.ViewList
+                        },
+                        contentDescription = "Toggle view"
                     )
                 }
                 Box {
@@ -165,18 +192,74 @@ fun AlbumsListScreen(
                 ) {
                     Text("No albums found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(state.albums, key = { it.id }) { album ->
-                        AlbumGridItem(album = album, onClick = { navController.navigate("album/${album.id}") })
+                else -> when (viewMode) {
+                    AlbumViewMode.LIST -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(state.albums, key = { it.id }) { album ->
+                            AlbumListRow(album = album, onClick = { navController.navigate("album/${album.id}") })
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 72.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                    AlbumViewMode.GRID_2, AlbumViewMode.GRID_3 -> {
+                        val cols = if (viewMode == AlbumViewMode.GRID_2) 2 else 3
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(cols),
+                            contentPadding = PaddingValues(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(state.albums, key = { it.id }) { album ->
+                                AlbumGridItem(album = album, onClick = { navController.navigate("album/${album.id}") })
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AlbumListRow(album: AlbumDto, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = album.coverArtUrl,
+            contentDescription = album.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = album.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = buildString {
+                    album.artist?.let { append(it) }
+                    album.year?.let { if (isNotEmpty()) append(" · "); append(it) }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

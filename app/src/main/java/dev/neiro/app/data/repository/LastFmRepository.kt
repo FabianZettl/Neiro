@@ -7,11 +7,16 @@ import dev.neiro.app.data.api.models.LastFmArtistInfo
 import dev.neiro.app.data.api.models.LastFmLovedTrack
 import dev.neiro.app.data.api.models.LastFmTopAlbumsResponse
 import dev.neiro.app.data.api.models.LastFmTopArtistsResponse
+import dev.neiro.app.data.api.models.LastFmTopTrack
+import dev.neiro.app.data.api.models.LastFmTopTracksMeta
 import dev.neiro.app.data.api.models.LastFmTopTracksResponse
 import dev.neiro.app.data.api.models.LastFmTrackInfo
 import dev.neiro.app.data.api.models.LastFmUserInfo
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -117,6 +122,42 @@ class LastFmRepository @Inject constructor(
     /** Call after loving/unloving a track so the cache reflects the new state. */
     fun invalidateLovedTracks() = lovedTracksCache.invalidate(Unit)
 
+    /**
+     * Returns the user's most-played tracks for a specific artist (up to [limit]).
+     * Strategy: fetch artist's globally popular tracks, then get user play count for each in parallel.
+     * This is reliable even if the user hasn't played the artist enough to appear in their top-500 overall.
+     */
+    suspend fun getTopTracksForArtist(artistName: String, limit: Int = 10): List<LastFmTopTrack> {
+        val cacheKey = "artist:$artistName:$limit"
+        topTracksCache.get(cacheKey)?.let { return it.topTracks?.tracks.orEmpty() }
+        val (user, key) = creds()
+        if (!isConfigured(user, key)) return emptyList()
+        return runCatching {
+            // Step 1: global top tracks for this artist
+            val artistTracks = api.getArtistTopTracks(artist = artistName, apiKey = key, limit = limit * 3)
+                .topTracks?.tracks.orEmpty()
+            if (artistTracks.isEmpty()) return emptyList()
+            // Step 2: fetch user play count for each track in parallel
+            coroutineScope {
+                artistTracks.map { track ->
+                    async {
+                        val userPlays = runCatching {
+                            api.getTrackInfo(track = track.name, artist = artistName, username = user, apiKey = key)
+                                .track?.userPlayCountLong ?: 0L
+                        }.getOrElse { 0L }
+                        if (userPlays > 0L) track.copy(playCount = userPlays.toString()) else null
+                    }
+                }.awaitAll()
+                    .filterNotNull()
+                    .sortedByDescending { it.playCountLong }
+                    .take(limit)
+            }
+        }.getOrElse { emptyList() }
+            .also { result ->
+                topTracksCache.put(cacheKey, LastFmTopTracksResponse(LastFmTopTracksMeta(result)))
+            }
+    }
+
     /** Returns the full loved track list (with image URLs) for display. */
     suspend fun getLovedTracksFull(limit: Int = 500): List<LastFmLovedTrack> {
         val (user, key) = creds()
@@ -184,10 +225,10 @@ class LastFmRepository @Inject constructor(
         return false // overridden by isSessionConfigured()
     }
 
-    /** True if read-only stats (top artists/albums/tracks) are available. Only needs username + API key. */
+    /** True if read-only stats (top artists/albums/tracks) are available. Only needs username + bundled API key. */
     suspend fun isStatsConfigured(): Boolean {
         val prefs = preferences.prefsFlow.first()
-        return prefs.lastFmUsername.isNotBlank() && prefs.lastFmApiKey.isNotBlank()
+        return prefs.lastFmUsername.isNotBlank() && appApiKey.isNotBlank()
     }
 
     /** True if write operations (love/unlove) are available. Needs a session key. */

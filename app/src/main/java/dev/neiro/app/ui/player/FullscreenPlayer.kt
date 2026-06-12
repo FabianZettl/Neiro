@@ -40,7 +40,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -255,7 +255,7 @@ fun FullscreenPlayer(
                     }
                     IconButton(onClick = { showQueue = true }) {
                         Icon(
-                            Icons.Default.QueueMusic,
+                            Icons.AutoMirrored.Filled.QueueMusic,
                             contentDescription = "Queue",
                             tint = if (state.queue.size > 1) Color.White else Color.White.copy(alpha = 0.4f),
                             modifier = Modifier.size(24.dp)

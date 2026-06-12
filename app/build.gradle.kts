@@ -21,8 +21,8 @@ android {
         applicationId = "dev.neiro.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "0.3.0-alpha"
 
         buildConfigField("String", "LASTFM_API_KEY",    "\"${localProps["lastfm.apiKey"] ?: ""}\"")
         buildConfigField("String", "LASTFM_API_SECRET", "\"${localProps["lastfm.apiSecret"] ?: ""}\"")

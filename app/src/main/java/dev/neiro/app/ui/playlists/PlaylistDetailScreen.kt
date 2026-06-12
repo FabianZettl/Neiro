@@ -181,6 +181,22 @@ fun PlaylistDetailScreen(
                             }
                         }
 
+                        // ── Empty state ───────────────────────────────────
+                        if (playlist.entry.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "This playlist is empty",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
                         // ── Track list ────────────────────────────────────
                         itemsIndexed(playlist.entry, key = { i, song -> "${song.id}_$i" }) { index, song ->
                             PlaylistTrackRow(

@@ -29,6 +29,9 @@ class PodcastRepository @Inject constructor(
     private val gson = Gson()
     private val listType = object : TypeToken<List<PodcastSubscription>>() {}.type
 
+    // Cache: feedUrl → parsed episodes, TTL 20 min
+    private val episodeCache = MemoryCache<String, Pair<PodcastSubscription, List<PodcastEpisode>>>(ttlMs = 20 * 60_000L)
+
     // ── Subscriptions ─────────────────────────────────────────────────────────
 
     val subscriptionsFlow: Flow<List<PodcastSubscription>> =
@@ -53,14 +56,14 @@ class PodcastRepository @Inject constructor(
     // ── Episodes ──────────────────────────────────────────────────────────────
 
     suspend fun fetchEpisodes(subscription: PodcastSubscription): List<PodcastEpisode> =
-        runCatching { fetchAndParse(subscription.feedUrl).second }.getOrElse { emptyList() }
+        runCatching { fetchAndParseOrCached(subscription.feedUrl).second }.getOrElse { emptyList() }
 
     /** Fetches up to 3 latest episodes from each subscription, sorted by date. */
     suspend fun getLatestEpisodes(limit: Int = 20): List<PodcastEpisodeWithPodcast> {
         val subs = loadSubscriptions()
         return subs.flatMap { sub ->
             runCatching {
-                fetchAndParse(sub.feedUrl).second.take(3).map { PodcastEpisodeWithPodcast(it, sub) }
+                fetchAndParseOrCached(sub.feedUrl).second.take(3).map { PodcastEpisodeWithPodcast(it, sub) }
             }.getOrElse { emptyList() }
         }.sortedByDescending { it.episode.pubDateMs ?: 0L }.take(limit)
     }
@@ -86,6 +89,11 @@ class PodcastRepository @Inject constructor(
     }
 
     // ── Internal: HTTP + parsing ──────────────────────────────────────────────
+
+    private suspend fun fetchAndParseOrCached(feedUrl: String): Pair<PodcastSubscription, List<PodcastEpisode>> {
+        episodeCache.get(feedUrl)?.let { return it }
+        return fetchAndParse(feedUrl).also { episodeCache.put(feedUrl, it) }
+    }
 
     private suspend fun fetchAndParse(feedUrl: String): Pair<PodcastSubscription, List<PodcastEpisode>> =
         withContext(Dispatchers.IO) {

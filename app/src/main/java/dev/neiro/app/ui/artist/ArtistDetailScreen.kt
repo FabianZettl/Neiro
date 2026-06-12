@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -29,7 +30,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -62,6 +63,7 @@ import dev.neiro.app.data.api.models.AlbumDto
 import dev.neiro.app.data.api.models.ArtistInfoDto
 import dev.neiro.app.data.api.models.ArtistWithAlbumsDto
 import dev.neiro.app.data.api.models.LastFmArtistInfo
+import dev.neiro.app.data.api.models.LastFmTopTrack
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -92,8 +94,10 @@ fun ArtistDetailScreen(
                     artist = state.artist!!,
                     artistInfo = state.artistInfo,
                     lastFmInfo = state.lastFmInfo,
+                    topTracks = state.topTracks,
                     onBackClick = { navController.popBackStack() },
-                    onAlbumClick = { albumId -> navController.navigate("album/$albumId") }
+                    onAlbumClick = { albumId -> navController.navigate("album/$albumId") },
+                    onTrackClick = { track -> viewModel.playTopTrack(track) }
                 )
             }
         }
@@ -106,8 +110,10 @@ private fun ArtistDetailContent(
     artist: ArtistWithAlbumsDto,
     artistInfo: ArtistInfoDto,
     lastFmInfo: LastFmArtistInfo?,
+    topTracks: List<LastFmTopTrack>,
     onBackClick: () -> Unit,
-    onAlbumClick: (String) -> Unit
+    onAlbumClick: (String) -> Unit,
+    onTrackClick: (LastFmTopTrack) -> Unit
 ) {
     val albums = artist.album.orEmpty()
     // Prefer Last.fm tags; fall back to ID3 genres from album metadata
@@ -234,7 +240,8 @@ private fun ArtistDetailContent(
                 Text(
                     "Links",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
@@ -244,7 +251,7 @@ private fun ArtistDetailContent(
                     links.forEach { (label, url) ->
                         OutlinedButton(onClick = { uriHandler.openUri(url) }) {
                             Icon(
-                                Icons.Default.OpenInNew,
+                                Icons.AutoMirrored.Filled.OpenInNew,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -256,13 +263,49 @@ private fun ArtistDetailContent(
             }
         }
 
-        // ── Item 5: Albums header ─────────────────────────────────────────────
+        // ── Item 5: Top tracks ────────────────────────────────────────────────
+        if (topTracks.isNotEmpty()) {
+            item {
+                Text(
+                    "Top Tracks",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+                )
+            }
+            item {
+                // 2 columns × 5 rows
+                val rows = topTracks.chunked(2)
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    rows.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            row.forEach { track ->
+                                TopTrackCell(
+                                    rank = topTracks.indexOf(track) + 1,
+                                    track = track,
+                                    onClick = { onTrackClick(track) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Item 6: Albums header ─────────────────────────────────────────────
         item {
             Text(
                 text = "${albums.size} Album${if (albums.size != 1) "s" else ""}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
             )
         }
 
@@ -308,7 +351,7 @@ private fun ArtistHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f)
+            .aspectRatio(3f / 4f)
     ) {
         if (imageUrl != null) {
             AsyncImage(
@@ -406,7 +449,8 @@ private fun BiographySection(biography: String) {
         Text(
             "About",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -418,6 +462,40 @@ private fun BiographySection(biography: String) {
         )
         TextButton(onClick = { expanded = !expanded }) {
             Text(if (expanded) "Show less" else "Read more")
+        }
+    }
+}
+
+@Composable
+private fun TopTrackCell(rank: Int, track: LastFmTopTrack, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = rank.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(20.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${formatArtistPlayCount(track.playCountLong)} plays",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

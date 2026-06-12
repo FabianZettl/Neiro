@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +33,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.OpenInBrowser
+import dev.neiro.app.BuildConfig
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -423,7 +427,86 @@ fun SettingsScreen(
             }
         }
 
+        // ── ABOUT ─────────────────────────────────────────────────────────────
+        SettingsDivider()
+        SectionHeader("About")
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Version", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Spacer(Modifier.height(8.dp))
+
+        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        OutlinedButton(
+            onClick = { uriHandler.openUri("https://github.com/FabianZettl/Neiro") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("GitHub — Source Code")
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Privacy",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Neiro does not collect or transmit any personal data to third parties. " +
+            "All music data is streamed directly from your own server. " +
+            "If you connect a Last.fm account, your username is sent to last.fm " +
+            "only to fetch your personal statistics and enable scrobbling.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Last.fm",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Last.fm features powered by Audioscrobbler. Data provided by Last.fm Ltd.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(
+            onClick = { uriHandler.openUri("https://www.last.fm") },
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text("last.fm", style = MaterialTheme.typography.bodySmall)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "License",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "MIT License — free to use, modify and distribute.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 

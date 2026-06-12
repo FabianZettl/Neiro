@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -22,8 +25,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TableRows
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,6 +60,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Column
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -64,6 +75,7 @@ fun ArtistsListScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var showSearch by remember { mutableStateOf(false) }
@@ -90,6 +102,23 @@ fun ArtistsListScreen(
                     Icon(
                         if (showSearch) Icons.Default.Close else Icons.Default.Search,
                         contentDescription = if (showSearch) "Close search" else "Search"
+                    )
+                }
+                // View mode cycle: LIST → GRID_2 → GRID_3 → LIST
+                IconButton(onClick = {
+                    viewModel.viewMode.value = when (viewMode) {
+                        ArtistViewMode.LIST   -> ArtistViewMode.GRID_2
+                        ArtistViewMode.GRID_2 -> ArtistViewMode.GRID_3
+                        ArtistViewMode.GRID_3 -> ArtistViewMode.LIST
+                    }
+                }) {
+                    Icon(
+                        when (viewMode) {
+                            ArtistViewMode.LIST   -> Icons.AutoMirrored.Filled.ViewList
+                            ArtistViewMode.GRID_2 -> Icons.Default.GridView
+                            ArtistViewMode.GRID_3 -> Icons.Default.TableRows
+                        },
+                        contentDescription = "Toggle view"
                     )
                 }
                 Box {
@@ -156,13 +185,29 @@ fun ArtistsListScreen(
                 ) {
                     Text("No artists found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.artists, key = { it.id }) { artist ->
-                        ArtistRow(artist = artist, onClick = { navController.navigate("artist/${artist.id}") })
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 72.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                        )
+                else -> when (viewMode) {
+                    ArtistViewMode.LIST -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(state.artists, key = { it.id }) { artist ->
+                            ArtistRow(artist = artist, onClick = { navController.navigate("artist/${artist.id}") })
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 72.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                    ArtistViewMode.GRID_2, ArtistViewMode.GRID_3 -> {
+                        val cols = if (viewMode == ArtistViewMode.GRID_2) 2 else 3
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(cols),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(state.artists, key = { it.id }) { artist ->
+                                ArtistGridCell(artist = artist, onClick = { navController.navigate("artist/${artist.id}") })
+                            }
+                        }
                     }
                 }
             }
@@ -221,5 +266,52 @@ private fun ArtistRow(artist: ArtistDto, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+
+@Composable
+private fun ArtistGridCell(artist: ArtistDto, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (artist.coverArtUrl != null) {
+            AsyncImage(
+                model = artist.coverArtUrl,
+                contentDescription = artist.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(0.5f)
+                )
+            }
+        }
+        androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+        Text(
+            text = artist.name,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
