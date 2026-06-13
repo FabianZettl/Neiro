@@ -95,6 +95,16 @@
 
 ---
 
+## 🖥️ Desktop App
+
+**[Neiro Desktop](https://github.com/FabianZettl/NieroDesktop)** is the companion desktop client (Linux / macOS / Windows) — same server, same Last.fm account, same playlists.
+
+- **QR Sync** — scan a QR code from the desktop app to transfer your server credentials to the phone instantly
+- **Rockbox Device Sync** — sync your library to any mounted DAP with configurable folder templates, server-side transcoding, and M3U playlist export
+- Built with Compose Multiplatform, VLC (vlcj), and the same dynamic color theming
+
+---
+
 ## 📦 Installation
 
 1. Go to [**Releases**](https://github.com/FabianZettl/Neiro/releases/latest) and download the latest APK
