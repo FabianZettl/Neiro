@@ -13,11 +13,13 @@ import dev.neiro.app.data.api.LastFmApi
 import dev.neiro.app.data.api.SubsonicApi
 import dev.neiro.app.data.api.SubsonicAuthInterceptor
 import dev.neiro.app.data.prefs.NieroPreferences
+import dev.neiro.app.data.repository.ConnectOkHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.TimeUnit
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Qualifier
@@ -74,6 +76,16 @@ object AppModule {
     @Singleton
     fun provideSubsonicApi(retrofit: Retrofit): SubsonicApi {
         return retrofit.create(SubsonicApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @ConnectOkHttp
+    fun provideConnectOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
     @Provides

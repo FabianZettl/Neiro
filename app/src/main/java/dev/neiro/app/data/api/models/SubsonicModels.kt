@@ -51,8 +51,6 @@ data class SongDto(
     val track: Int? = null,
     val year: Int? = null,
     val bitRate: Int? = null,
-    val size: Long? = null,
-    val discNumber: Int? = null,
     val contentType: String? = null,
     val suffix: String? = null
 )

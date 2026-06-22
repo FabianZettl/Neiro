@@ -21,9 +21,11 @@ data class NieroPrefs(
     val dynamicColor: Boolean = true,
     val accentColorHex: String = "#E5484D",
     val lastFmUsername: String = "",
-    val lastFmApiKey: String = "",
-    val lastFmApiSecret: String = "",
-    val lastFmSessionKey: String = ""
+    val lastFmSessionKey: String = "",
+    // Neiro Connect — desktop companion
+    val connectHost: String = "",
+    val connectPort: Int = 7373,
+    val connectToken: String = ""
 )
 
 @Singleton
@@ -39,9 +41,10 @@ class NieroPreferences @Inject constructor(
             dynamicColor = prefs[DYNAMIC_COLOR_KEY] ?: true,
             accentColorHex = prefs[ACCENT_COLOR_KEY] ?: "#E5484D",
             lastFmUsername = prefs[LASTFM_USERNAME_KEY] ?: "",
-            lastFmApiKey = prefs[LASTFM_API_KEY] ?: "",
-            lastFmApiSecret = prefs[LASTFM_API_SECRET_KEY] ?: "",
-            lastFmSessionKey = prefs[LASTFM_SESSION_KEY] ?: ""
+            lastFmSessionKey = prefs[LASTFM_SESSION_KEY] ?: "",
+            connectHost = prefs[CONNECT_HOST_KEY] ?: "",
+            connectPort = prefs[CONNECT_PORT_KEY] ?: 7373,
+            connectToken = prefs[CONNECT_TOKEN_KEY] ?: ""
         )
     }
 
@@ -67,9 +70,24 @@ class NieroPreferences @Inject constructor(
             prefs[DYNAMIC_COLOR_KEY] = nieroPrefs.dynamicColor
             prefs[ACCENT_COLOR_KEY] = nieroPrefs.accentColorHex
             prefs[LASTFM_USERNAME_KEY] = nieroPrefs.lastFmUsername
-            prefs[LASTFM_API_KEY] = nieroPrefs.lastFmApiKey
-            prefs[LASTFM_API_SECRET_KEY] = nieroPrefs.lastFmApiSecret
             prefs[LASTFM_SESSION_KEY] = nieroPrefs.lastFmSessionKey
+            // Connect info is managed exclusively via saveConnectInfo / clearConnectInfo
+        }
+    }
+
+    suspend fun saveConnectInfo(host: String, port: Int, token: String) {
+        dataStore.edit { prefs ->
+            prefs[CONNECT_HOST_KEY] = host
+            prefs[CONNECT_PORT_KEY] = port
+            prefs[CONNECT_TOKEN_KEY] = token
+        }
+    }
+
+    suspend fun clearConnectInfo() {
+        dataStore.edit { prefs ->
+            prefs[CONNECT_HOST_KEY] = ""
+            prefs[CONNECT_PORT_KEY] = 7373
+            prefs[CONNECT_TOKEN_KEY] = ""
         }
     }
 
@@ -91,9 +109,10 @@ class NieroPreferences @Inject constructor(
         val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
         val ACCENT_COLOR_KEY  = stringPreferencesKey("accent_color")
         val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
-        val LASTFM_API_KEY = stringPreferencesKey("lastfm_api_key")
-        val LASTFM_API_SECRET_KEY = stringPreferencesKey("lastfm_api_secret")
         val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
         val PODCAST_SUBSCRIPTIONS_KEY = stringPreferencesKey("podcast_subscriptions")
+        val CONNECT_HOST_KEY = stringPreferencesKey("connect_host")
+        val CONNECT_PORT_KEY = intPreferencesKey("connect_port")
+        val CONNECT_TOKEN_KEY = stringPreferencesKey("connect_token")
     }
 }

@@ -6,11 +6,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.neiro.app.data.api.models.LastFmTrackInfo
 import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.api.models.StructuredLyrics
+import dev.neiro.app.data.repository.ConnectRepository
+import dev.neiro.app.data.repository.DesktopState
 import dev.neiro.app.data.repository.LastFmRepository
 import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.player.PlayerController
 import dev.neiro.app.player.PlayerState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,10 +33,12 @@ data class LastFmTrackState(
 class PlayerViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val lastFmRepository: LastFmRepository,
-    private val musicRepository: MusicRepository
+    private val musicRepository: MusicRepository,
+    private val connectRepository: ConnectRepository
 ) : ViewModel() {
 
     val playerState: StateFlow<PlayerState> = playerController.playerState
+    val desktopState: StateFlow<DesktopState> = connectRepository.state
 
     private val _lastFmState = MutableStateFlow(LastFmTrackState())
     val lastFmState: StateFlow<LastFmTrackState> = _lastFmState.asStateFlow()
@@ -119,4 +124,39 @@ class PlayerViewModel @Inject constructor(
     fun addToQueue(song: SongDto) = viewModelScope.launch { playerController.addToQueue(song) }
     fun setSleepTimer(durationMs: Long) = playerController.setSleepTimer(durationMs)
     fun cancelSleepTimer() = playerController.cancelSleepTimer()
+
+    // ── Neiro Connect — desktop remote control ────────────────────────────────
+
+    fun sendCommandToDesktop(action: String, value: Long = 0L) =
+        connectRepository.sendCommand(action, value)
+
+    /** Cast the current local queue to the desktop. */
+    fun castQueueToDesktop() {
+        val state = playerState.value
+        val queue = state.queue
+        if (queue.isEmpty()) return
+        connectRepository.castSongs(
+            songIds      = queue.map { it.id },
+            startIndex   = state.queueIndex,
+            startPositionMs = state.positionMs
+        )
+    }
+
+    /** Transfer desktop playback to this device. */
+    fun transferFromDesktop() {
+        val ds = desktopState.value
+        if (ds !is DesktopState.Playing) return
+        val songId = ds.song.songId
+        val posMs  = ds.song.positionMs
+        connectRepository.sendCommand("pause")
+        viewModelScope.launch {
+            val song = musicRepository.getSong(songId) ?: return@launch
+            delay(300) // give desktop time to pause
+            playerController.playTrack(song, listOf(song), 0)
+            if (posMs > 0) {
+                delay(500)
+                playerController.seekTo(posMs)
+            }
+        }
+    }
 }

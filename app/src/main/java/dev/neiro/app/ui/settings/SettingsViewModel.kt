@@ -17,9 +17,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.net.Uri
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.Base64
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -43,7 +45,7 @@ data class SettingsUiState(
     val lastFmPassword: String = "",
     val lastFmSessionKey: String = "",
     val lastFmAuthState: ConnectionState = ConnectionState.Idle,
-    val syncCode: String = ""
+    val desktopSyncState: ConnectionState = ConnectionState.Idle
 )
 
 @HiltViewModel
@@ -240,16 +242,57 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun generateSyncCode() {
+    /**
+     * Called when the QR scanner reads a neiro-sync:// URL from the desktop app.
+     * Parses host/port/token and POSTs the current server credentials to the desktop.
+     * Also extracts connectPort + connectToken for Neiro Connect and saves them.
+     */
+    fun onDesktopQrScanned(url: String) {
+        val uri = Uri.parse(url)
+        val host  = uri.getQueryParameter("host")  ?: return
+        val port  = uri.getQueryParameter("port")  ?: return
+        val token = uri.getQueryParameter("token") ?: return
+        // Neiro Connect params — optional (desktop may not have Connect enabled)
+        val connectPort  = uri.getQueryParameter("connectPort")?.toIntOrNull() ?: 7373
+        val connectToken = uri.getQueryParameter("connectToken") ?: ""
+        val s = _uiState.value
+        if (s.serverUrl.isBlank() || s.username.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                desktopSyncState = ConnectionState.Error("Configure your server first")
+            )
+            return
+        }
         viewModelScope.launch {
-            val s = _uiState.value
+            _uiState.value = _uiState.value.copy(desktopSyncState = ConnectionState.Testing)
             val sectionsJson = preferences.homeSectionsJson.first() ?: ""
-            val raw = buildString {
-                append("${s.serverUrl}\n${s.username}\n${s.password}")
-                if (sectionsJson.isNotBlank()) append("\n$sectionsJson")
+            val payload = Gson().toJson(mapOf(
+                "serverUrl"       to s.serverUrl,
+                "username"        to s.username,
+                "password"        to s.password,
+                "homeSectionsJson" to sectionsJson
+            ))
+            _uiState.value = _uiState.value.copy(
+                desktopSyncState = try {
+                    withContext(Dispatchers.IO) {
+                        val request = Request.Builder()
+                            .url("http://$host:$port/sync?token=$token")
+                            .post(payload.toRequestBody("application/json".toMediaType()))
+                            .build()
+                        pingClient.newCall(request).execute().use { resp ->
+                            if (resp.isSuccessful)
+                                ConnectionState.Success("Desktop connected!")
+                            else
+                                ConnectionState.Error("Desktop rejected the connection (${resp.code})")
+                        }
+                    }
+                } catch (e: Exception) {
+                    ConnectionState.Error(e.localizedMessage ?: "Could not reach desktop")
+                }
+            )
+            // Persist Neiro Connect info so ConnectRepository can start the WebSocket
+            if (connectToken.isNotBlank()) {
+                preferences.saveConnectInfo(host, connectPort, connectToken)
             }
-            val code = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
-            _uiState.value = _uiState.value.copy(syncCode = code)
         }
     }
 
