@@ -190,16 +190,31 @@ class HomeViewModel @Inject constructor(
                     val lfmAlbums = lastFmRepository
                         .getTopAlbums(config.lastFmPeriod.apiValue, config.size * 3)
                         ?.topAlbums?.albums.orEmpty()
-                    val subsonicAlbums = runCatching { musicRepository.getAlbumsByType("alphabeticalByName", 500) }.getOrElse { emptyList() }
-                    val matched = lfmAlbums.mapNotNull { lfm ->
-                        val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, subsonicAlbums)
-                            ?: return@mapNotNull null
-                        LastFmMatchedAlbum(
-                            name = lfm.name, artistName = lfm.artist.name,
-                            playCount = lfm.playCountInt,
-                            subsonicId = sub.id,
-                            coverArtUrl = sub.coverArtUrl ?: lfm.imageUrl
-                        )
+                    // Targeted per-album search rather than a capped local-catalog preload —
+                    // a fixed-size preload (e.g. "first 500 albums alphabetically") silently
+                    // excludes anything past that cutoff in large libraries, so albums whose
+                    // names sort late in the alphabet could never match at all.
+                    val semaphore = Semaphore(5)
+                    val matched = coroutineScope {
+                        lfmAlbums.map { lfm ->
+                            async {
+                                semaphore.withPermit {
+                                    val candidates = runCatching {
+                                        (musicRepository.search(lfm.name).album +
+                                            musicRepository.search("${lfm.name} ${lfm.artist.name}").album)
+                                            .distinctBy { it.id }
+                                    }.getOrElse { emptyList() }
+                                    val sub = findBestAlbumMatch(lfm.name, lfm.artist.name, candidates)
+                                        ?: return@withPermit null
+                                    LastFmMatchedAlbum(
+                                        name = lfm.name, artistName = lfm.artist.name,
+                                        playCount = lfm.playCountInt,
+                                        subsonicId = sub.id,
+                                        coverArtUrl = sub.coverArtUrl ?: lfm.imageUrl
+                                    )
+                                }
+                            }
+                        }.awaitAll().filterNotNull()
                     }.take(config.size)
                     SectionItems.LastFmTopAlbums(matched)
                 } else {
