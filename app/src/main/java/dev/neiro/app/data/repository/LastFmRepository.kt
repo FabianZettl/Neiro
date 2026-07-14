@@ -8,7 +8,6 @@ import dev.neiro.app.data.api.models.LastFmLovedTrack
 import dev.neiro.app.data.api.models.LastFmTopAlbumsResponse
 import dev.neiro.app.data.api.models.LastFmTopArtistsResponse
 import dev.neiro.app.data.api.models.LastFmTopTrack
-import dev.neiro.app.data.api.models.LastFmTopTracksMeta
 import dev.neiro.app.data.api.models.LastFmTopTracksResponse
 import dev.neiro.app.data.api.models.LastFmTrackInfo
 import dev.neiro.app.data.api.models.LastFmUserInfo
@@ -126,8 +125,10 @@ class LastFmRepository @Inject constructor(
      * regardless of whether the tracks are globally popular.
      */
     suspend fun getTopTracksForArtist(artistName: String, limit: Int = 10): List<LastFmTopTrack> {
-        val cacheKey = "artist:$artistName:$limit"
-        topTracksCache.get(cacheKey)?.let { return it.topTracks?.tracks.orEmpty() }
+        // Deliberately uncached (unlike the other getTopX methods above) — this backs the
+        // Artist detail screen, which the desktop client always fetches fresh for. A cached
+        // value here would let mobile show a stale ranking right after a new scrobble while
+        // desktop already reflects it, so the two platforms would visibly disagree.
         val (user, key) = creds()
         if (!isConfigured(user, key)) return emptyList()
         return runCatching {
@@ -137,9 +138,6 @@ class LastFmRepository @Inject constructor(
                 .sortedByDescending { it.playCountLong }
                 .take(limit)
         }.getOrElse { emptyList() }
-            .also { result ->
-                topTracksCache.put(cacheKey, LastFmTopTracksResponse(LastFmTopTracksMeta(result)))
-            }
     }
 
     /** Returns the full loved track list (with image URLs) for display. */
