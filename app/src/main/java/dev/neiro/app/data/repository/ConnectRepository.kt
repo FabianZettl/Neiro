@@ -158,6 +158,13 @@ class ConnectRepository @Inject constructor(
         runCatching {
             val map = gson.fromJson(json, Map::class.java)
             val type = map["type"] as? String ?: "idle"
+            if (type == "homeLayout") {
+                val sectionsJson = map["homeSectionsJson"] as? String
+                if (!sectionsJson.isNullOrBlank()) {
+                    scope?.launch { preferences.saveHomeSections(sectionsJson) }
+                }
+                return@runCatching
+            }
             if (type == "idle") {
                 _state.value = DesktopState.Connected
             } else {

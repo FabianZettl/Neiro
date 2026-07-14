@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.OpenInBrowser
 import dev.neiro.app.BuildConfig
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,6 +102,29 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var bitrateMenuExpanded by remember { mutableStateOf(false) }
     val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+
+    if (state.homeLayoutConflict != null) {
+        AlertDialog(
+            onDismissRequest = { /* must pick one — no dismiss without a choice */ },
+            title = { Text("Unterschiedliches Home-Layout") },
+            text = {
+                Text(
+                    "Dieses Handy und der Desktop haben unterschiedliche Home-Layouts. " +
+                        "Welches möchtest du behalten? Das andere wird überschrieben."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.resolveHomeLayoutKeepDesktop() }) {
+                    Text("Desktop-Layout")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.resolveHomeLayoutKeepMobile() }) {
+                    Text("Dieses Handy")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -451,6 +475,22 @@ fun SettingsScreen(
                 Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Scan Desktop QR Code")
+            }
+
+            if (state.connectHost.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { viewModel.pushHomeLayoutToDesktop() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Push Home Layout to Desktop")
+                    }
+                    state.homeLayoutPushResult?.let {
+                        Spacer(Modifier.width(8.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
 

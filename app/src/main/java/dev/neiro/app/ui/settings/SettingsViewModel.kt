@@ -11,6 +11,7 @@ import dev.neiro.app.data.prefs.NieroPrefs
 import dev.neiro.app.data.repository.LastFmRepository
 import dev.neiro.app.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,14 @@ sealed class ConnectionState {
     data class Error(val message: String) : ConnectionState()
 }
 
+/** Pending choice after a QR sync found different Home layouts on both devices. */
+data class HomeLayoutConflict(
+    val desktopHomeSectionsJson: String,
+    val host: String,
+    val port: String,
+    val token: String
+)
+
 data class SettingsUiState(
     val serverUrl: String = "",
     val username: String = "",
@@ -45,7 +54,10 @@ data class SettingsUiState(
     val lastFmPassword: String = "",
     val lastFmSessionKey: String = "",
     val lastFmAuthState: ConnectionState = ConnectionState.Idle,
-    val desktopSyncState: ConnectionState = ConnectionState.Idle
+    val desktopSyncState: ConnectionState = ConnectionState.Idle,
+    val connectHost: String = "",
+    val homeLayoutConflict: HomeLayoutConflict? = null,
+    val homeLayoutPushResult: String? = null
 )
 
 @HiltViewModel
@@ -76,7 +88,8 @@ class SettingsViewModel @Inject constructor(
                     lastFmUsername = prefs.lastFmUsername,
                     lastFmSessionKey = prefs.lastFmSessionKey,
                     lastFmAuthState = if (prefs.lastFmSessionKey.isNotBlank())
-                        ConnectionState.Success("Connected") else ConnectionState.Idle
+                        ConnectionState.Success("Connected") else ConnectionState.Idle,
+                    connectHost = prefs.connectHost
                 )
             }
         }
@@ -271,6 +284,7 @@ class SettingsViewModel @Inject constructor(
                 "password"        to s.password,
                 "homeSectionsJson" to sectionsJson
             ))
+            var conflict: HomeLayoutConflict? = null
             _uiState.value = _uiState.value.copy(
                 desktopSyncState = try {
                     withContext(Dispatchers.IO) {
@@ -279,20 +293,93 @@ class SettingsViewModel @Inject constructor(
                             .post(payload.toRequestBody("application/json".toMediaType()))
                             .build()
                         pingClient.newCall(request).execute().use { resp ->
-                            if (resp.isSuccessful)
+                            if (resp.isSuccessful) {
+                                // Desktop returns its own (pre-overwrite) Home layout so we can
+                                // detect a conflict with what we just sent it.
+                                val ackBody = resp.body?.string().orEmpty()
+                                val ack = runCatching {
+                                    Gson().fromJson(ackBody, Map::class.java)
+                                }.getOrNull()
+                                val desktopSections = ack?.get("homeSectionsJson") as? String ?: ""
+                                val hasConflict = ack?.get("conflict") as? Boolean ?: false
+                                if (hasConflict) {
+                                    conflict = HomeLayoutConflict(desktopSections, host, port, token)
+                                }
                                 ConnectionState.Success("Desktop connected!")
-                            else
+                            } else {
                                 ConnectionState.Error("Desktop rejected the connection (${resp.code})")
+                            }
                         }
                     }
                 } catch (e: Exception) {
                     ConnectionState.Error(e.localizedMessage ?: "Could not reach desktop")
-                }
+                },
+                homeLayoutConflict = conflict
             )
             // Persist Neiro Connect info so ConnectRepository can start the WebSocket
             if (connectToken.isNotBlank()) {
                 preferences.saveConnectInfo(host, connectPort, connectToken)
             }
+        }
+    }
+
+    /** User chose to keep this phone's Home layout — tell the desktop to adopt it. */
+    fun resolveHomeLayoutKeepMobile() {
+        val conflict = _uiState.value.homeLayoutConflict ?: return
+        _uiState.value = _uiState.value.copy(homeLayoutConflict = null)
+        viewModelScope.launch {
+            val sectionsJson = preferences.homeSectionsJson.first() ?: ""
+            postResolve(conflict.host, conflict.port, conflict.token, keepMobile = true, mobileJson = sectionsJson)
+        }
+    }
+
+    /** User chose to keep the desktop's Home layout — adopt it locally and tell the desktop to keep its own. */
+    fun resolveHomeLayoutKeepDesktop() {
+        val conflict = _uiState.value.homeLayoutConflict ?: return
+        _uiState.value = _uiState.value.copy(homeLayoutConflict = null)
+        viewModelScope.launch {
+            preferences.saveHomeSections(conflict.desktopHomeSectionsJson)
+            postResolve(conflict.host, conflict.port, conflict.token, keepMobile = false)
+        }
+    }
+
+    private suspend fun postResolve(host: String, port: String, token: String, keepMobile: Boolean, mobileJson: String = "") {
+        val body = Gson().toJson(mapOf("keepMobile" to keepMobile, "mobileHomeSectionsJson" to mobileJson))
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url("http://$host:$port/resolve?token=$token")
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                pingClient.newCall(request).execute().close()
+            }
+        }
+    }
+
+    /** Manually push this phone's current Home layout to the paired desktop over Neiro Connect. */
+    fun pushHomeLayoutToDesktop() {
+        viewModelScope.launch {
+            val prefs = preferences.prefsFlow.first()
+            if (prefs.connectHost.isBlank()) {
+                _uiState.value = _uiState.value.copy(homeLayoutPushResult = "Kein Desktop gekoppelt")
+                return@launch
+            }
+            val sectionsJson = preferences.homeSectionsJson.first() ?: ""
+            val body = Gson().toJson(mapOf("homeSectionsJson" to sectionsJson))
+            val ok = runCatching {
+                withContext(Dispatchers.IO) {
+                    val request = Request.Builder()
+                        .url("http://${prefs.connectHost}:${prefs.connectPort}/api/homeLayout?token=${prefs.connectToken}")
+                        .post(body.toRequestBody("application/json".toMediaType()))
+                        .build()
+                    pingClient.newCall(request).execute().use { it.isSuccessful }
+                }
+            }.getOrDefault(false)
+            _uiState.value = _uiState.value.copy(
+                homeLayoutPushResult = if (ok) "Home-Layout gesendet" else "Fehlgeschlagen"
+            )
+            delay(3000)
+            _uiState.value = _uiState.value.copy(homeLayoutPushResult = null)
         }
     }
 
