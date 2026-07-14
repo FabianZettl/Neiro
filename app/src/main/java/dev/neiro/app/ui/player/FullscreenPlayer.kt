@@ -1,6 +1,7 @@
 package dev.neiro.app.ui.player
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -82,6 +83,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -441,12 +443,25 @@ fun FullscreenPlayer(
                             }
                         }
                         if (lastFm.hasSession) {
-                            IconButton(onClick = { viewModel.toggleLove() }) {
+                            var justToggledLove by remember { mutableStateOf(false) }
+                            val loveScale by animateFloatAsState(
+                                targetValue = if (justToggledLove) 1.3f else 1f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                                finishedListener = { if (it > 1f) justToggledLove = false },
+                                label = "loveScale"
+                            )
+                            val loveTint by animateColorAsState(
+                                if (lastFm.isLoved) Color(0xFFE5484D) else Color.White.copy(alpha = 0.7f),
+                                label = "loveTint"
+                            )
+                            IconButton(onClick = { justToggledLove = true; viewModel.toggleLove() }) {
                                 Icon(
                                     imageVector = if (lastFm.isLoved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = if (lastFm.isLoved) "Unlove" else "Love",
-                                    tint = if (lastFm.isLoved) Color(0xFFE5484D) else Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(24.dp)
+                                    tint = loveTint,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .graphicsLayer(scaleX = loveScale, scaleY = loveScale)
                                 )
                             }
                         }
@@ -559,12 +574,14 @@ fun FullscreenPlayer(
                                 onClick = { viewModel.togglePlayPause() },
                                 modifier = Modifier.size(72.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (displayIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (displayIsPlaying) "Pause" else "Play",
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(40.dp)
-                                )
+                                AnimatedContent(targetState = displayIsPlaying, label = "fullscreenPlayPause") { isPlaying ->
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (isPlaying) "Pause" else "Play",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
                             }
                         }
 

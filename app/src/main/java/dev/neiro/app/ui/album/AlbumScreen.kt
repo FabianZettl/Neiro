@@ -57,6 +57,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -98,7 +100,11 @@ fun AlbumScreen(
     val lastFm = state.lastFmInfo
     val lovedKeys = state.lovedTrackKeys
     val playlists by playlistActionViewModel.playlists.collectAsStateWithLifecycle()
-    val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+    // Scoped to just (currentSongId, isPlaying) — playerState itself ticks every 500ms during
+    // playback (position/duration), and collecting the whole object here would recompose every
+    // visible TrackRow on each tick instead of only when the playing track actually changes.
+    val nowPlaying by remember { playerViewModel.playerState.map { it.currentSong?.id to it.isPlaying }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(initialValue = null to false)
 
     val context = LocalContext.current
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle()
@@ -294,13 +300,13 @@ fun AlbumScreen(
                         val isLoved = lovedKeys.contains(
                             "${song.title.lowercase()}_${(song.artist ?: "").lowercase()}"
                         )
-                        val isCurrentSong = playerState.currentSong?.id == song.id
+                        val isCurrentSong = nowPlaying.first == song.id
                         TrackRow(
                             song = song,
                             trackNumber = song.track ?: (index + 1),
                             isLoved = isLoved,
                             isCurrentSong = isCurrentSong,
-                            isPlaying = isCurrentSong && playerState.isPlaying,
+                            isPlaying = isCurrentSong && nowPlaying.second,
                             onClick = { viewModel.playTrackAtIndex(index) },
                             onPlayNext = { playerViewModel.playNext(song) },
                             onAddToQueue = { playerViewModel.addToQueue(song) },

@@ -57,7 +57,10 @@ object AppModule {
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
+                // BASIC logs full request URLs — including the auth token/salt query params
+                // on every Subsonic call — so this must never run in a release build.
+                level = if (dev.neiro.app.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
+                    else HttpLoggingInterceptor.Level.NONE
             })
             .build()
     }
@@ -94,7 +97,10 @@ object AppModule {
     fun provideLastFmOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
+                // BASIC logs full request URLs — including the auth token/salt query params
+                // on every Subsonic call — so this must never run in a release build.
+                level = if (dev.neiro.app.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
+                    else HttpLoggingInterceptor.Level.NONE
             })
             .build()
     }

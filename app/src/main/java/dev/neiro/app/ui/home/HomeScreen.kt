@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
@@ -397,12 +398,12 @@ fun HomeScreen(
                                         onTrackClick = { track -> viewModel.playTopTrack(track) }
                                     )
                                     SectionLayout.LIST -> MultiColumnList(
-                                        items = items.items,
+                                        items = items.items.withIndex().toList(),
                                         itemsPerColumn = 4
-                                    ) { track ->
+                                    ) { (index, track) ->
                                         LastFmTrackListRow(
                                             track = track,
-                                            index = items.items.indexOf(track),
+                                            index = index,
                                             onTrackClick = { viewModel.playTopTrack(track) }
                                         )
                                     }
@@ -418,12 +419,12 @@ fun HomeScreen(
                                         onTrackClick = { track -> viewModel.playTopTrack(track) }
                                     )
                                     SectionLayout.LIST -> MultiColumnList(
-                                        items = items.items,
+                                        items = items.items.withIndex().toList(),
                                         itemsPerColumn = 4
-                                    ) { track ->
+                                    ) { (index, track) ->
                                         LastFmTrackListRow(
                                             track = track,
-                                            index = items.items.indexOf(track),
+                                            index = index,
                                             onTrackClick = { viewModel.playTopTrack(track) }
                                         )
                                     }
@@ -842,7 +843,7 @@ private fun <T> MultiColumnList(
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        items(columns) { column ->
+        itemsIndexed(columns, key = { index, _ -> index }) { _, column ->
             Column(modifier = Modifier.width(columnWidth)) {
                 column.forEach { item ->
                     itemContent(item)

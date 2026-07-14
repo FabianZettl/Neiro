@@ -2,6 +2,7 @@ package dev.neiro.app.data.repository
 
 import com.google.gson.Gson
 import dev.neiro.app.data.prefs.NieroPreferences
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -124,6 +125,7 @@ class ConnectRepository @Inject constructor(
     private suspend fun connect(host: String, port: Int, token: String) {
         val url = "ws://$host:$port/api/ws?token=$token"
         val request = Request.Builder().url(url).build()
+        val closed = CompletableDeferred<Unit>()
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (_state.value is DesktopState.Disconnected) {
@@ -141,17 +143,17 @@ class ConnectRepository @Inject constructor(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 _state.value = DesktopState.Disconnected
+                closed.complete(Unit)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 _state.value = DesktopState.Disconnected
+                closed.complete(Unit)
             }
         }
         webSocket = http.newWebSocket(request, listener)
-        // Block until the socket closes (we poll state to detect closure)
-        while (webSocket != null && _state.value !is DesktopState.Disconnected) {
-            delay(500)
-        }
+        // Suspend until the socket closes/fails, instead of polling state on a timer.
+        closed.await()
     }
 
     private fun parseAndUpdateState(json: String) {

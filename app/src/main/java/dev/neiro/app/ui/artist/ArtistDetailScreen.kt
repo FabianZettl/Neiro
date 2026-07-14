@@ -311,7 +311,7 @@ private fun ArtistDetailContent(
 
         // ── Items 6+: Album grid rows (2 columns) ─────────────────────────────
         val rows = albums.chunked(2)
-        items(rows) { row ->
+        items(rows, key = { it.first().id }) { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

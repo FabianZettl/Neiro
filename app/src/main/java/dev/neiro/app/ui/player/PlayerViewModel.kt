@@ -44,12 +44,16 @@ class PlayerViewModel @Inject constructor(
     val isDesktopConnectionPaused: StateFlow<Boolean> = connectRepository.manuallyPaused
     val isRemoteMode: StateFlow<Boolean> = connectRepository.remoteMode
 
-    /** Cover art URL for the song currently playing on desktop (for remote mode NowPlaying). */
+    /**
+     * Cover art URL for the song currently playing on desktop (for remote mode NowPlaying).
+     * desktopState ticks roughly once a second while playing (position updates) — the
+     * buildCoverArtUrl call embeds a fresh random auth token each time, so without this
+     * distinctUntilChanged Coil would never get a cache hit and re-download the same image.
+     */
     val desktopCoverArtUrl: StateFlow<String?> = desktopState
-        .map { state ->
-            val id = (state as? DesktopState.Playing)?.song?.coverArtId ?: return@map null
-            musicRepository.getCoverArtUrl(id, size = 800)
-        }
+        .map { (it as? DesktopState.Playing)?.song?.coverArtId }
+        .distinctUntilChanged()
+        .map { id -> id?.let { musicRepository.getCoverArtUrl(it, size = 800) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _lastFmState = MutableStateFlow(LastFmTrackState())

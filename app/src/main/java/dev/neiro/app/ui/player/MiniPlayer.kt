@@ -1,5 +1,6 @@
 package dev.neiro.app.ui.player
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -189,12 +190,14 @@ fun MiniPlayer(
                             onClick = { viewModel.togglePlayPause() },
                             modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(
-                                imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (state.isPlaying) "Pause" else "Play",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(26.dp)
-                            )
+                            AnimatedContent(targetState = state.isPlaying, label = "miniPlayPause") { isPlaying ->
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause" else "Play",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
                         }
 
                         IconButton(
@@ -290,12 +293,14 @@ fun MiniPlayer(
                             },
                             modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(
-                                imageVector = if (ds.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (ds.isPlaying) "Desktop pausieren" else "Desktop abspielen",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            AnimatedContent(targetState = ds.isPlaying, label = "miniPlayPauseDesktop") { isPlaying ->
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Desktop pausieren" else "Desktop abspielen",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
 
                         IconButton(

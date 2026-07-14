@@ -52,6 +52,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -135,7 +140,11 @@ fun NieroNavGraph(
                 startDestination = startDestination!!,
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeSource(hazeState)
+                    .hazeSource(hazeState),
+                enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(200)) { it / 8 } },
+                exitTransition = { fadeOut(tween(150)) },
+                popEnterTransition = { fadeIn(tween(200)) },
+                popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { it / 8 } }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(

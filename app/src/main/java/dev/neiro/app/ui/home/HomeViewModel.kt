@@ -58,6 +58,13 @@ class HomeViewModel @Inject constructor(
 
     private val _refreshTrigger = MutableStateFlow(0)
 
+    companion object {
+        private val albumSuffixRegex = Regex(
+            """[\s\-–()\[\]]*(remastered|deluxe|expanded|anniversary|edition|version|bonus|track|re-?issue|re-?master)[\s\S]*$""",
+            RegexOption.IGNORE_CASE
+        )
+    }
+
     init {
         viewModelScope.launch {
             combine(
@@ -99,11 +106,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun findBestAlbumMatch(lfmName: String, lfmArtist: String, subsonicAlbums: List<dev.neiro.app.data.api.models.AlbumDto>): dev.neiro.app.data.api.models.AlbumDto? {
-        val suffixRegex = Regex(
-            """[\s\-–()\[\]]*(remastered|deluxe|expanded|anniversary|edition|version|bonus|track|re-?issue|re-?master)[\s\S]*$""",
-            RegexOption.IGNORE_CASE
-        )
-        fun normalize(s: String) = s.replace(suffixRegex, "").trim().lowercase()
+        fun normalize(s: String) = s.replace(albumSuffixRegex, "").trim().lowercase()
 
         val normLfmName = normalize(lfmName)
         val normLfmArtist = normalize(lfmArtist)

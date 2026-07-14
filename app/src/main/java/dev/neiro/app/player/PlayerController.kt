@@ -200,6 +200,10 @@ class PlayerController @Inject constructor(
     private suspend fun startPositionUpdater() {
         while (true) {
             delay(500)
+            // Skip the query + state write entirely while nothing is playing — no reason to
+            // wake every collector of playerState (Home album rows, mini player, etc.) on a
+            // fixed timer when position can't have moved.
+            if (!_playerState.value.isPlaying) continue
             _controller.value?.let { controller ->
                 // Use ExoPlayer directly when available (same process — more accurate).
                 val rawPos = NieroPlayerHolder.player?.currentPosition?.takeIf { it != C.TIME_UNSET }
