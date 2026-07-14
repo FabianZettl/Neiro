@@ -295,7 +295,7 @@ fun SettingsScreen(
                         val color = runCatching {
                             Color(android.graphics.Color.parseColor(hex))
                         }.getOrElse { Color.Red }
-                        val selected = state.accentColorHex == hex
+                        val selected = state.accentColorHex.equals(hex, ignoreCase = true)
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -310,6 +310,47 @@ fun SettingsScreen(
                                 )
                         )
                     }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                val isPreset = accentColors.any { it.first.equals(state.accentColorHex, ignoreCase = true) }
+                var hexInput by remember(state.accentColorHex) {
+                    mutableStateOf(if (isPreset) "" else state.accentColorHex.removePrefix("#"))
+                }
+                var hexError by remember { mutableStateOf(false) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val previewColor = runCatching {
+                        Color(android.graphics.Color.parseColor(state.accentColorHex))
+                    }.getOrElse { Color.Red }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(previewColor)
+                            .border(1.dp, onSurfaceVariant.copy(alpha = 0.3f), CircleShape)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    OutlinedTextField(
+                        value = hexInput,
+                        onValueChange = { input ->
+                            val cleaned = input.removePrefix("#").take(6)
+                                .filter { it.isDigit() || it.uppercaseChar() in 'A'..'F' }
+                            hexInput = cleaned.uppercase()
+                            if (cleaned.length == 6) {
+                                hexError = false
+                                viewModel.onAccentColorChange("#$cleaned")
+                            } else {
+                                hexError = cleaned.isNotEmpty()
+                            }
+                        },
+                        label = { Text("Hex") },
+                        prefix = { Text("#") },
+                        isError = hexError,
+                        singleLine = true,
+                        modifier = Modifier.width(160.dp)
+                    )
                 }
             }
         }
