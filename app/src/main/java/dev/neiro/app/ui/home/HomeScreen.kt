@@ -309,13 +309,22 @@ fun HomeScreen(
                             }
 
                             is SectionItems.LastFmTopArtists -> when (sectionContent.config.layout) {
-                                SectionLayout.SHELF -> item(key = "lfm_artists_shelf_${sectionContent.config.id}") {
-                                    LastFmArtistShelfRow(
-                                        artists = items.items,
-                                        itemShape = sectionContent.config.itemShape,
-                                        itemSize = sectionContent.config.itemSize,
-                                        onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
-                                    )
+                                SectionLayout.SHELF -> when (sectionContent.config.itemSize) {
+                                    ItemSize.LARGE -> item(key = "lfm_artists_hero_${sectionContent.config.id}") {
+                                        LastFmArtistHeroRow(
+                                            artists = items.items,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
+                                        )
+                                    }
+                                    else -> item(key = "lfm_artists_shelf_${sectionContent.config.id}") {
+                                        LastFmArtistShelfRow(
+                                            artists = items.items,
+                                            itemShape = sectionContent.config.itemShape,
+                                            itemSize = sectionContent.config.itemSize,
+                                            onArtistClick = { subsonicId -> navController.navigate("artist/$subsonicId") }
+                                        )
+                                    }
                                 }
                                 SectionLayout.GRID -> {
                                     val cols = when (sectionContent.config.itemSize) { ItemSize.SMALL -> 3; ItemSize.LARGE -> 1; else -> 2 }
@@ -340,13 +349,22 @@ fun HomeScreen(
                             }
 
                             is SectionItems.LastFmTopAlbums -> when (sectionContent.config.layout) {
-                                SectionLayout.SHELF -> item(key = "lfm_albums_shelf_${sectionContent.config.id}") {
-                                    LastFmAlbumShelfRow(
-                                        albums = items.items,
-                                        itemShape = sectionContent.config.itemShape,
-                                        itemSize = sectionContent.config.itemSize,
-                                        onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
-                                    )
+                                SectionLayout.SHELF -> when (sectionContent.config.itemSize) {
+                                    ItemSize.LARGE -> item(key = "lfm_albums_hero_${sectionContent.config.id}") {
+                                        LastFmAlbumHeroRow(
+                                            albums = items.items,
+                                            itemShape = sectionContent.config.itemShape,
+                                            onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
+                                        )
+                                    }
+                                    else -> item(key = "lfm_albums_shelf_${sectionContent.config.id}") {
+                                        LastFmAlbumShelfRow(
+                                            albums = items.items,
+                                            itemShape = sectionContent.config.itemShape,
+                                            itemSize = sectionContent.config.itemSize,
+                                            onAlbumClick = { subsonicId -> navController.navigate("album/$subsonicId") }
+                                        )
+                                    }
                                 }
                                 SectionLayout.GRID -> {
                                     val cols = when (sectionContent.config.itemSize) { ItemSize.SMALL -> 3; ItemSize.LARGE -> 1; else -> 2 }
@@ -621,6 +639,134 @@ private fun HeroShelfRow(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+// ── HERO layout — Last.fm-sourced albums/artists (LARGE size) ────────────────
+// ItemSize.LARGE always means the full-width "hero" card treatment — its
+// shelfCardWidth() is deliberately 0.dp because it must never be used for a
+// regular narrow shelf card. Last.fm sections need their own hero row (rather
+// than reusing HeroShelfRow) since they carry LastFmMatchedAlbum/Artist, not
+// AlbumDto/ArtistDto.
+
+@Composable
+private fun LastFmAlbumHeroRow(
+    albums: List<LastFmMatchedAlbum>,
+    itemShape: ItemShape = ItemShape.ROUNDED,
+    onAlbumClick: (String) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(albums, key = { "${it.name}_${it.artistName}" }) { album ->
+            Box(
+                modifier = Modifier
+                    .fillParentMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(itemShape.clipShape())
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .then(
+                        if (album.subsonicId != null) Modifier.clickable { onAlbumClick(album.subsonicId) }
+                        else Modifier
+                    )
+            ) {
+                AsyncImage(
+                    model = album.coverArtUrl,
+                    contentDescription = album.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomStart)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color.Transparent,
+                                    androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.75f)
+                                )
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = album.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = album.artistName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LastFmArtistHeroRow(
+    artists: List<LastFmMatchedArtist>,
+    itemShape: ItemShape = ItemShape.ROUNDED,
+    onArtistClick: (String) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(artists, key = { it.name }) { artist ->
+            Box(
+                modifier = Modifier
+                    .fillParentMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(itemShape.clipShape())
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .then(
+                        if (artist.subsonicId != null) Modifier.clickable { onArtistClick(artist.subsonicId) }
+                        else Modifier
+                    )
+            ) {
+                AsyncImage(
+                    model = artist.coverArtUrl,
+                    contentDescription = artist.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomStart)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color.Transparent,
+                                    androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.75f)
+                                )
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = artist.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
