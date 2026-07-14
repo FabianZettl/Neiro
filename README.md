@@ -125,11 +125,38 @@ cd Neiro
 # APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Requires Android SDK with min SDK 26, target SDK 35.
+Requires Android SDK with min SDK 26, target SDK 36.
 
 ---
 
 ## 📋 Changelog
+
+### v0.4.0-alpha *(2026-07-15)*
+
+**New features**
+- **Neiro Connect**: pair with the [desktop companion app](https://github.com/FabianZettl/NeiroDesktop) via QR code — cast the queue to desktop, remote-control desktop playback, and transfer now-playing between devices in real time
+- Explicit Remote Mode (enter/exit via the cast icon) plus manual pause/resume for the desktop connection, independent of pairing
+- Bidirectional Home layout sync: on first pairing, choose whether to keep the phone's or desktop's Home layout; push either layout to the other device any time from Settings
+- Free-form hex input for the custom accent color, alongside the 8 presets
+
+**Bug fixes**
+- "Most Played Albums" silently dropped highly-scrobbled albums on large libraries — a 500-album alphabetical preload cut off anything sorting past roughly "K", so albums like "Rumours" or "Paramore" could never match and got replaced by lower-ranked ones. Matching is now done via targeted per-album search, independent of library size
+- Artist "Top Tracks" could show stale rankings for up to 15 minutes after a new scrobble (removed an overly-aggressive cache on that one call)
+- "Most Played Albums/Artists of All Time" Home sections (large card size) rendered completely invisible — Last.fm-sourced widgets were missing the large-card layout that plain library widgets already had
+
+**Performance**
+- Position/progress polling no longer runs on a timer while playback is paused or stopped
+- Album screen no longer re-renders every track row on each position tick — only the actually-playing row updates
+- Fixed a bug where the desktop remote-mode cover art was silently re-downloaded every second instead of using the image cache
+- Request logging (which included auth tokens in the URL) is now debug-build only, never in release
+- Assorted smaller fixes: hoisted a per-call regex allocation, removed a couple of O(n²) list lookups, added missing list item keys for smoother scrolling
+
+**Polish**
+- Crossfade animation on play/pause icons and the Last.fm love toggle
+- Fade/slide transitions between screens instead of instant cuts
+
+**Removed**
+- A long-abandoned, unused early desktop prototype module
 
 ### v0.3.0-alpha *(2026-06-12)*
 

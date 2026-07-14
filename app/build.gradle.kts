@@ -21,8 +21,8 @@ android {
         applicationId = "dev.neiro.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0-alpha"
+        versionCode = 4
+        versionName = "0.4.0-alpha"
 
         buildConfigField("String", "LASTFM_API_KEY",    "\"${localProps["lastfm.apiKey"] ?: ""}\"")
         buildConfigField("String", "LASTFM_API_SECRET", "\"${localProps["lastfm.apiSecret"] ?: ""}\"")
@@ -31,6 +31,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Signed with the debug key for now (private sideload, no Play Store release
+            // yet) so the release APK can directly replace the debug build via adb install.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
