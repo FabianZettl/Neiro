@@ -14,9 +14,6 @@ import dev.neiro.app.data.api.models.LastFmTrackInfo
 import dev.neiro.app.data.api.models.LastFmUserInfo
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -31,8 +28,8 @@ class LastFmRepository @Inject constructor(
     private val topAlbumsCache  = MemoryCache<String, LastFmTopAlbumsResponse>(ttlMs = 15 * 60_000L)
     private val topTracksCache  = MemoryCache<String, LastFmTopTracksResponse>(ttlMs = 15 * 60_000L)
     private val lovedTracksCache = MemoryCache<Unit, Set<String>>(ttlMs = 5 * 60_000L)
-    private val artistInfoCache = MemoryCache<String, LastFmArtistInfo>(ttlMs = 30 * 60_000L)
-    private val albumInfoCache  = MemoryCache<String, LastFmAlbumInfo>(ttlMs = 30 * 60_000L)
+    private val artistInfoCache = MemoryCache<String, LastFmArtistInfo>(ttlMs = 5 * 60_000L)
+    private val albumInfoCache  = MemoryCache<String, LastFmAlbumInfo>(ttlMs = 10 * 60_000L)
 
     // Bundled app-level credentials — users never need to enter these.
     private val appApiKey    get() = BuildConfig.LASTFM_API_KEY
@@ -124,8 +121,9 @@ class LastFmRepository @Inject constructor(
 
     /**
      * Returns the user's most-played tracks for a specific artist (up to [limit]).
-     * Strategy: fetch artist's globally popular tracks, then get user play count for each in parallel.
-     * This is reliable even if the user hasn't played the artist enough to appear in their top-500 overall.
+     * Strategy: fetch the user's overall top 1000 tracks and filter by artist name.
+     * This gives 100% accurate play counts matching what Last.fm shows on the website,
+     * regardless of whether the tracks are globally popular.
      */
     suspend fun getTopTracksForArtist(artistName: String, limit: Int = 10): List<LastFmTopTrack> {
         val cacheKey = "artist:$artistName:$limit"
@@ -133,25 +131,11 @@ class LastFmRepository @Inject constructor(
         val (user, key) = creds()
         if (!isConfigured(user, key)) return emptyList()
         return runCatching {
-            // Step 1: global top tracks for this artist
-            val artistTracks = api.getArtistTopTracks(artist = artistName, apiKey = key, limit = limit * 3)
+            api.getTopTracks(user = user, apiKey = key, period = "overall", limit = 1000)
                 .topTracks?.tracks.orEmpty()
-            if (artistTracks.isEmpty()) return emptyList()
-            // Step 2: fetch user play count for each track in parallel
-            coroutineScope {
-                artistTracks.map { track ->
-                    async {
-                        val userPlays = runCatching {
-                            api.getTrackInfo(track = track.name, artist = artistName, username = user, apiKey = key)
-                                .track?.userPlayCountLong ?: 0L
-                        }.getOrElse { 0L }
-                        if (userPlays > 0L) track.copy(playCount = userPlays.toString()) else null
-                    }
-                }.awaitAll()
-                    .filterNotNull()
-                    .sortedByDescending { it.playCountLong }
-                    .take(limit)
-            }
+                .filter { it.artist.name.equals(artistName, ignoreCase = true) }
+                .sortedByDescending { it.playCountLong }
+                .take(limit)
         }.getOrElse { emptyList() }
             .also { result ->
                 topTracksCache.put(cacheKey, LastFmTopTracksResponse(LastFmTopTracksMeta(result)))
@@ -220,11 +204,6 @@ class LastFmRepository @Inject constructor(
         }.getOrElse { false }
     }
 
-    fun isSessionActive(): Boolean {
-        // Synchronous check — use in ViewModel init after prefs are loaded
-        return false // overridden by isSessionConfigured()
-    }
-
     /** True if read-only stats (top artists/albums/tracks) are available. Only needs username + bundled API key. */
     suspend fun isStatsConfigured(): Boolean {
         val prefs = preferences.prefsFlow.first()
@@ -244,6 +223,4 @@ class LastFmRepository @Inject constructor(
             .joinToString("") { "%02x".format(it) }
     }
 
-    // Helper to update prefs without losing other fields
-    private suspend fun NieroPrefs.save() = preferences.savePrefs(this)
 }

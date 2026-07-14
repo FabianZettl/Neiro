@@ -116,13 +116,13 @@ class PodcastRepository @Inject constructor(
         // Current episode
         var epTitle = ""; var epDesc: String? = null; var epAudio = ""
         var epGuid = ""; var epImage: String? = null; var epDur: Long? = null
-        var epDate: Long? = null; var epSize: Long? = null; var epMime: String? = null
+        var epDate: Long? = null; var epMime: String? = null
 
         val episodes = mutableListOf<PodcastEpisode>()
 
         fun resetEpisode() {
             epTitle = ""; epDesc = null; epAudio = ""; epGuid = ""
-            epImage = null; epDur = null; epDate = null; epSize = null; epMime = null
+            epImage = null; epDur = null; epDate = null; epMime = null
         }
 
         var ev = p.eventType
@@ -153,7 +153,6 @@ class PodcastRepository @Inject constructor(
                         if (url.isNotBlank() && (epAudio.isBlank() || mime.startsWith("audio"))) {
                             epAudio = url
                             epMime  = mime.ifBlank { null }
-                            epSize  = p.getAttributeValue(null, "length")?.toLongOrNull()
                         }
                     }
                     tag == "itunes:image" && inItem          -> epImage = p.getAttributeValue(null, "href")
@@ -176,7 +175,6 @@ class PodcastRepository @Inject constructor(
                                 imageUrl      = epImage,
                                 durationSeconds = epDur,
                                 pubDateMs     = epDate,
-                                fileSize      = epSize,
                                 mimeType      = epMime
                             ))
                         }

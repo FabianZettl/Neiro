@@ -18,6 +18,7 @@ import dev.neiro.app.data.api.models.PodcastSubscription
 import dev.neiro.app.data.api.models.SongDto
 import dev.neiro.app.data.prefs.NieroPreferences
 import dev.neiro.app.data.prefs.NieroPrefs
+import dev.neiro.app.data.repository.ConnectRepository
 import dev.neiro.app.data.repository.MusicRepository
 import dev.neiro.app.di.ApplicationScope
 import dev.neiro.app.widget.updateNieroWidget
@@ -40,6 +41,7 @@ class PlayerController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val preferences: NieroPreferences,
     private val musicRepository: MusicRepository,
+    private val connectRepository: ConnectRepository,
     @ApplicationScope private val scope: CoroutineScope
 ) {
     private val _controller = MutableStateFlow<MediaController?>(null)
@@ -226,6 +228,12 @@ class PlayerController @Inject constructor(
     }
 
     suspend fun playTrack(song: SongDto, queue: List<SongDto>, startIndex: Int = 0) {
+        // In remote mode, cast to desktop instead of playing locally
+        if (connectRepository.remoteMode.value) {
+            connectRepository.castSongs(queue.map { it.id }, startIndex)
+            return
+        }
+
         val prefs = preferences.prefsFlow.first()
         currentQueue = queue
         val mediaItems = queue.map { buildMediaItem(it, prefs) }
@@ -259,6 +267,9 @@ class PlayerController @Inject constructor(
         val controller = _controller.value ?: return
         if (controller.isPlaying) controller.pause() else controller.play()
     }
+
+    fun pause() { _controller.value?.let { if (it.isPlaying) it.pause() } }
+    fun play()  { _controller.value?.let { if (!it.isPlaying) it.play() } }
 
     fun skipNext() {
         _controller.value?.seekToNextMediaItem()

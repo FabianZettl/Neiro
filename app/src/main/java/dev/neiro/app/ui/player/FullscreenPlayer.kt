@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import dev.neiro.app.data.api.models.StructuredLyrics
+import dev.neiro.app.data.repository.DesktopState
 import dev.neiro.app.ui.player.shareNowPlayingCard
 import dev.neiro.app.player.RepeatMode
 import dev.neiro.app.ui.components.AddToPlaylistDialog
@@ -113,10 +114,25 @@ fun FullscreenPlayer(
     val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
     val showLyrics by viewModel.showLyrics.collectAsStateWithLifecycle()
     val playlists by playlistActionViewModel.playlists.collectAsStateWithLifecycle()
+    val isRemoteMode by viewModel.isRemoteMode.collectAsStateWithLifecycle()
+    val desktopState by viewModel.desktopState.collectAsStateWithLifecycle()
+    val desktopCoverArtUrl by viewModel.desktopCoverArtUrl.collectAsStateWithLifecycle()
+    val ds = (desktopState as? DesktopState.Playing)?.song
+
     val song = state.currentSong ?: run {
         navController.popBackStack()
         return
     }
+
+    // In remote mode, display desktop song info instead of local
+    val displayTitle      = if (isRemoteMode && ds != null) ds.title      else song.title
+    val displayArtist     = if (isRemoteMode && ds != null) ds.artist      else song.artist ?: ""
+    val displayAlbum      = if (isRemoteMode && ds != null) ds.album       else song.album ?: ""
+    val displayCoverUrl   = if (isRemoteMode && ds != null) desktopCoverArtUrl ?: song.coverArtUrl else song.coverArtUrl
+    val displayDurationMs = if (isRemoteMode && ds != null) ds.durationMs  else state.durationMs
+    val displayPositionMs = if (isRemoteMode && ds != null) ds.positionMs  else state.positionMs
+    val displayIsPlaying  = if (isRemoteMode && ds != null) ds.isPlaying   else state.isPlaying
+    val displaySongKey    = if (isRemoteMode && ds != null) ds.songId      else song.id
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
@@ -139,12 +155,12 @@ fun FullscreenPlayer(
 
     val context = LocalContext.current
     var palette by remember { mutableStateOf(DefaultNeiroPalette) }
-    LaunchedEffect(song.coverArtUrl) {
-        palette = extractPalette(context, song.coverArtUrl)
+    LaunchedEffect(displayCoverUrl) {
+        if (displayCoverUrl != null) palette = extractPalette(context, displayCoverUrl)
     }
 
-    val progress = if (state.durationMs > 0)
-        (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+    val progress = if (displayDurationMs > 0)
+        (displayPositionMs.toFloat() / displayDurationMs).coerceIn(0f, 1f)
     else 0f
 
     val scope = rememberCoroutineScope()
@@ -156,7 +172,7 @@ fun FullscreenPlayer(
     }
 
     val artScale by animateFloatAsState(
-        targetValue = if (state.isPlaying) 1.0f else 0.95f,
+        targetValue = if (displayIsPlaying) 1.0f else 0.95f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -172,7 +188,7 @@ fun FullscreenPlayer(
 
             // ── Layer 1: Blurred album art background ──────────────────
             AsyncImage(
-                model = song.coverArtUrl,
+                model = displayCoverUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -215,9 +231,9 @@ fun FullscreenPlayer(
                         )
                     }
                     Text(
-                        text = "NOW PLAYING",
+                        text = if (isRemoteMode) "DESKTOP FERNSTEUERUNG" else "NOW PLAYING",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = if (isRemoteMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         letterSpacing = MaterialTheme.typography.labelSmall.letterSpacing
                     )
@@ -295,7 +311,7 @@ fun FullscreenPlayer(
 
                 // ── Album art — animated crossfade on song change ──────
                 AnimatedContent(
-                    targetState = song.id,
+                    targetState = displaySongKey,
                     transitionSpec = {
                         fadeIn(animationSpec = tween(300)) togetherWith
                                 fadeOut(animationSpec = tween(300))
@@ -315,8 +331,8 @@ fun FullscreenPlayer(
                             .clip(RoundedCornerShape(20.dp))
                     ) {
                         AsyncImage(
-                            model = song.coverArtUrl,
-                            contentDescription = song.album,
+                            model = displayCoverUrl,
+                            contentDescription = displayAlbum,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -354,36 +370,36 @@ fun FullscreenPlayer(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = song.title,
+                                text = displayTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (!song.artist.isNullOrBlank()) {
+                            if (displayArtist.isNotBlank()) {
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = song.artist,
+                                    text = displayArtist,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable(enabled = song.artistId != null) {
-                                        song.artistId?.let { navController.navigate("artist/$it") }
+                                    modifier = Modifier.clickable(enabled = !isRemoteMode && song.artistId != null) {
+                                        if (!isRemoteMode) song.artistId?.let { navController.navigate("artist/$it") }
                                     }
                                 )
                             }
-                            if (!song.album.isNullOrBlank()) {
+                            if (displayAlbum.isNotBlank()) {
                                 Text(
-                                    text = song.album,
+                                    text = displayAlbum,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.5f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable(enabled = song.albumId != null) {
-                                        song.albumId?.let { navController.navigate("album/$it") }
+                                    modifier = Modifier.clickable(enabled = !isRemoteMode && song.albumId != null) {
+                                        if (!isRemoteMode) song.albumId?.let { navController.navigate("album/$it") }
                                     }
                                 )
                             }
@@ -469,7 +485,7 @@ fun FullscreenPlayer(
                                     seekValue = v
                                 },
                                 onValueChangeFinished = {
-                                    viewModel.seekTo((seekValue * state.durationMs).toLong())
+                                    viewModel.seekTo((seekValue * displayDurationMs).toLong())
                                     seekJob = scope.launch {
                                         delay(600)
                                         isSeeking = false
@@ -487,12 +503,12 @@ fun FullscreenPlayer(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = formatMs(if (isSeeking) (seekValue * state.durationMs).toLong() else state.positionMs),
+                                    text = formatMs(if (isSeeking) (seekValue * displayDurationMs).toLong() else displayPositionMs),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = formatMs(state.durationMs),
+                                    text = formatMs(displayDurationMs),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
@@ -544,8 +560,8 @@ fun FullscreenPlayer(
                                 modifier = Modifier.size(72.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (state.isPlaying) "Pause" else "Play",
+                                    imageVector = if (displayIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (displayIsPlaying) "Pause" else "Play",
                                     tint = MaterialTheme.colorScheme.onPrimary,
                                     modifier = Modifier.size(40.dp)
                                 )

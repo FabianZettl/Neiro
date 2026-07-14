@@ -18,7 +18,6 @@ data class PodcastEpisode(
     val imageUrl: String? = null,
     val durationSeconds: Long? = null,
     val pubDateMs: Long? = null,
-    val fileSize: Long? = null,
     val mimeType: String? = null
 )
 

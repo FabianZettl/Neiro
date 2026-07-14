@@ -15,10 +15,12 @@ import dev.neiro.app.player.PlayerState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,6 +41,16 @@ class PlayerViewModel @Inject constructor(
 
     val playerState: StateFlow<PlayerState> = playerController.playerState
     val desktopState: StateFlow<DesktopState> = connectRepository.state
+    val isDesktopConnectionPaused: StateFlow<Boolean> = connectRepository.manuallyPaused
+    val isRemoteMode: StateFlow<Boolean> = connectRepository.remoteMode
+
+    /** Cover art URL for the song currently playing on desktop (for remote mode NowPlaying). */
+    val desktopCoverArtUrl: StateFlow<String?> = desktopState
+        .map { state ->
+            val id = (state as? DesktopState.Playing)?.song?.coverArtId ?: return@map null
+            musicRepository.getCoverArtUrl(id, size = 800)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _lastFmState = MutableStateFlow(LastFmTrackState())
     val lastFmState: StateFlow<LastFmTrackState> = _lastFmState.asStateFlow()
@@ -112,10 +124,30 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun togglePlayPause() = playerController.togglePlayPause()
-    fun skipNext() = playerController.skipNext()
-    fun skipPrev() = playerController.skipPrev()
-    fun seekTo(positionMs: Long) = playerController.seekTo(positionMs)
+    fun togglePlayPause() {
+        if (connectRepository.remoteMode.value) {
+            val playing = (desktopState.value as? DesktopState.Playing)?.song?.isPlaying ?: false
+            sendCommandToDesktop(if (playing) "pause" else "play")
+        } else {
+            playerController.togglePlayPause()
+        }
+    }
+
+    fun skipNext() {
+        if (connectRepository.remoteMode.value) sendCommandToDesktop("next")
+        else playerController.skipNext()
+    }
+
+    fun skipPrev() {
+        if (connectRepository.remoteMode.value) sendCommandToDesktop("prev")
+        else playerController.skipPrev()
+    }
+
+    fun seekTo(positionMs: Long) {
+        if (connectRepository.remoteMode.value) sendCommandToDesktop("seek", positionMs)
+        else playerController.seekTo(positionMs)
+    }
+
     fun seekToQueueItem(index: Int) = playerController.seekToQueueItem(index)
     fun toggleShuffle() = playerController.toggleShuffle()
     fun cycleRepeat() = playerController.cycleRepeat()
@@ -126,6 +158,29 @@ class PlayerViewModel @Inject constructor(
     fun cancelSleepTimer() = playerController.cancelSleepTimer()
 
     // ── Neiro Connect — desktop remote control ────────────────────────────────
+
+    fun pauseDesktopConnection() = connectRepository.pauseConnection()
+    fun resumeDesktopConnection() = connectRepository.resumeConnection()
+
+    /** Enter remote mode: cast current local queue to desktop and pause local playback. */
+    fun enterRemoteMode() {
+        val state = playerState.value
+        if (state.queue.isNotEmpty()) {
+            connectRepository.castSongs(state.queue.map { it.id }, state.queueIndex, state.positionMs)
+        }
+        connectRepository.enterRemoteMode()
+        playerController.pause()
+    }
+
+    /** Exit remote mode: stop controlling desktop, resume local playback. */
+    fun exitRemoteMode() {
+        connectRepository.exitRemoteMode()
+        sendCommandToDesktop("pause")
+        // Resume local Android playback
+        if (playerState.value.currentSong != null) {
+            playerController.play()
+        }
+    }
 
     fun sendCommandToDesktop(action: String, value: Long = 0L) =
         connectRepository.sendCommand(action, value)

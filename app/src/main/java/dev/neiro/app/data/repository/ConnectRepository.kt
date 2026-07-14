@@ -60,6 +60,16 @@ class ConnectRepository @Inject constructor(
     private val _state = MutableStateFlow<DesktopState>(DesktopState.Disconnected)
     val state: StateFlow<DesktopState> = _state
 
+    private val _manuallyPaused = MutableStateFlow(false)
+    val manuallyPaused: StateFlow<Boolean> = _manuallyPaused
+
+    /** True while Android is acting as a remote control for the desktop player. */
+    private val _remoteMode = MutableStateFlow(false)
+    val remoteMode: StateFlow<Boolean> = _remoteMode
+
+    fun enterRemoteMode() { _remoteMode.value = true }
+    fun exitRemoteMode()  { _remoteMode.value = false }
+
     private var webSocket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var scope: CoroutineScope? = null
@@ -69,11 +79,33 @@ class ConnectRepository @Inject constructor(
         scope = appScope
         appScope.launch {
             preferences.prefsFlow.collect { prefs ->
+                if (_manuallyPaused.value) return@collect
                 if (prefs.connectHost.isBlank() || prefs.connectToken.isBlank()) {
                     disconnect()
                 } else {
                     reconnect(prefs.connectHost, prefs.connectPort, prefs.connectToken)
                 }
+            }
+        }
+    }
+
+    /** Temporarily stop the connection without clearing pairing credentials. */
+    fun pauseConnection() {
+        _manuallyPaused.value = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        webSocket?.close(1000, "manual-pause")
+        webSocket = null
+        _state.value = DesktopState.Disconnected
+    }
+
+    /** Resume after a manual pause. */
+    fun resumeConnection() {
+        _manuallyPaused.value = false
+        scope?.launch {
+            val prefs = preferences.prefsFlow.first()
+            if (prefs.connectHost.isNotBlank() && prefs.connectToken.isNotBlank()) {
+                reconnect(prefs.connectHost, prefs.connectPort, prefs.connectToken)
             }
         }
     }

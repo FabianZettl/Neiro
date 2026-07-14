@@ -222,6 +222,13 @@ class MusicRepository @Inject constructor(
         }
     }.getOrElse { emptyList() }
 
+    suspend fun getSong(songId: String): SongDto? = runCatching {
+        val prefs = preferences.prefsFlow.first()
+        val response = api.getSong(songId).response
+        if (response.status != "ok" || response.song.id.isBlank()) return@runCatching null
+        response.song.copy(coverArtUrl = response.song.coverArt?.let { buildCoverArtUrl(prefs, it) })
+    }.getOrNull()
+
     suspend fun getLyrics(songId: String): StructuredLyrics? = runCatching {
         val resp = api.getLyricsBySongId(songId)
         val list = resp.response.lyricsList?.structuredLyrics ?: return@runCatching null
@@ -270,10 +277,15 @@ class MusicRepository @Inject constructor(
         return "$base/rest/stream?id=$songId&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json$bitrateParam"
     }
 
-    private fun buildCoverArtUrl(prefs: NieroPrefs, id: String, size: Int = 300): String {
+    fun buildCoverArtUrl(prefs: NieroPrefs, id: String, size: Int = 300): String {
         val salt = SubsonicAuthInterceptor.generateSalt()
         val token = SubsonicAuthInterceptor.md5(prefs.password + salt)
         val base = prefs.serverUrl.trimEnd('/')
         return "$base/rest/getCoverArt?id=$id&u=${prefs.username}&t=$token&s=$salt&v=1.16.1&c=neiro&f=json&size=$size"
+    }
+
+    suspend fun getCoverArtUrl(id: String, size: Int = 300): String {
+        val prefs = preferences.prefsFlow.first()
+        return buildCoverArtUrl(prefs, id, size)
     }
 }

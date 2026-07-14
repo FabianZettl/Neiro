@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SystemUpdateAlt
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -58,6 +60,8 @@ fun MiniPlayer(
 ) {
     val state by viewModel.playerState.collectAsStateWithLifecycle()
     val desktopState by viewModel.desktopState.collectAsStateWithLifecycle()
+    val isDesktopPaused by viewModel.isDesktopConnectionPaused.collectAsStateWithLifecycle()
+    val isRemoteMode by viewModel.isRemoteMode.collectAsStateWithLifecycle()
     val song = state.currentSong
     val desktopPlaying = desktopState as? DesktopState.Playing
 
@@ -153,16 +157,29 @@ fun MiniPlayer(
                             }
                         }
 
-                        // Cast-to-desktop button when desktop is connected but idle
-                        if (desktopState is DesktopState.Connected && state.isPlaying) {
+                        // Cast button: connect to desktop remote mode
+                        if (!isRemoteMode && desktopState !is DesktopState.Disconnected) {
                             IconButton(
-                                onClick = { viewModel.castQueueToDesktop() },
+                                onClick = { viewModel.enterRemoteMode() },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Cast,
-                                    contentDescription = "Cast to Desktop",
+                                    contentDescription = "Desktop fernsteuern",
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else if (!isRemoteMode && isDesktopPaused) {
+                            // Manually paused — offer quick reconnect
+                            IconButton(
+                                onClick = { viewModel.resumeDesktopConnection() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Wifi,
+                                    contentDescription = "Desktop verbinden",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -210,8 +227,8 @@ fun MiniPlayer(
                     )
                 }
 
-                // ── Desktop remote row ─────────────────────────────────────────
-                if (desktopPlaying != null) {
+                // ── Desktop remote row — only show when in remote mode ─────────
+                if (isRemoteMode && desktopPlaying != null) {
                     val ds = desktopPlaying.song
                     val desktopProgress = if (ds.durationMs > 0)
                         (ds.positionMs.toFloat() / ds.durationMs).coerceIn(0f, 1f)
@@ -259,7 +276,7 @@ fun MiniPlayer(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SystemUpdateAlt,
-                                contentDescription = "Transfer to phone",
+                                contentDescription = "Auf Gerät übertragen",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -275,7 +292,7 @@ fun MiniPlayer(
                         ) {
                             Icon(
                                 imageVector = if (ds.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (ds.isPlaying) "Pause Desktop" else "Play Desktop",
+                                contentDescription = if (ds.isPlaying) "Desktop pausieren" else "Desktop abspielen",
                                 tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -287,9 +304,22 @@ fun MiniPlayer(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
-                                contentDescription = "Next on Desktop",
+                                contentDescription = "Nächster Titel (Desktop)",
                                 tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Exit remote mode button
+                        IconButton(
+                            onClick = { viewModel.exitRemoteMode() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = "Fernsteuerung beenden",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }

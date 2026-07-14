@@ -41,14 +41,31 @@ suspend fun extractPalette(context: Context, imageUrl: String?, darkTheme: Boole
 
 private fun buildNeiroPalette(bitmap: Bitmap, darkTheme: Boolean): NeiroPalette {
     val palette = Palette.from(bitmap).generate()
-    val accArgb = palette.getVibrantColor(palette.getLightVibrantColor(NieroAccent.toArgb()))
+
+    // Accent color priority:
+    //   1. Vibrant swatch (colorful images)
+    //   2. Light vibrant swatch
+    //   3. Dominant-derived neutral (B&W / desaturated covers — strips most saturation,
+    //      keeps the image's actual hue/brightness rather than falling back to the app's default red)
+    //   4. App default (empty palette — extremely rare)
+    val accentArgb = palette.vibrantSwatch?.rgb
+        ?: palette.lightVibrantSwatch?.rgb
+        ?: palette.dominantSwatch?.let { swatch ->
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(swatch.rgb, hsv)
+            // Keep hue, remove most saturation → neutral gray matching the cover's tone
+            hsv[1] = (hsv[1] * 0.25f).coerceAtMost(0.15f)
+            hsv[2] = if (darkTheme) 0.70f else 0.42f
+            android.graphics.Color.HSVToColor(hsv)
+        }
+        ?: NieroAccent.toArgb()
 
     return if (darkTheme) {
         // Dark mode: only the accent color adapts — background, surface and text stay fixed
         // so the UI stays dark and legible regardless of album art
         NeiroPalette(
             background    = NieroBackground,
-            accent        = Color(accArgb),
+            accent        = Color(accentArgb),
             textPrimary   = NieroTextPrimary,
             textSecondary = NieroTextSecondary,
             surface       = NieroSurface
@@ -61,7 +78,7 @@ private fun buildNeiroPalette(bitmap: Bitmap, darkTheme: Boolean): NeiroPalette 
         val bg = Color(bgArgb)
         NeiroPalette(
             background    = bg,
-            accent        = Color(accArgb),
+            accent        = Color(accentArgb),
             textPrimary   = Color(txtArgb),
             textSecondary = Color(secArgb),
             surface       = darken(bg, 0.12f)
